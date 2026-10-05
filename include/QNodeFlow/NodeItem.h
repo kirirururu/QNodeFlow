@@ -8,8 +8,13 @@ class QGraphicsSceneHoverEvent;
 
 namespace QNodeFlow {
 
+class PortItem;
+
 /**
- * A displayable node with an arbitrary number of input and output ports
+ * A displayable node with an arbitrary number of input and output ports.
+ *
+ * Each port is a separate PortItem, a child of the node: it moves with the node
+ * and is drawn on top of the node body.
  */
 class NodeItem : public QGraphicsObject
 {
@@ -26,12 +31,16 @@ public:
 	QVariant id() const;
 
 	void setTitle(const QString& title);
-	void setInputs(const QVector<Port>& ports);
-	void setOutputs(const QVector<Port>& ports);
+
+	PortItem* addInputPort(const QString& name);
+	PortItem* addOutputPort(const QString& name);
 
 	// Center position of a port in scene coordinates (for future connection wiring).
 	QPointF inputScenePos(int index) const;
 	QPointF outputScenePos(int index) const;
+
+	PortItem* inputPort(int index) const;
+	PortItem* outputPort(int index) const;
 
 	QRectF boundingRect() const override;
 	void paint(QPainter* painter,
@@ -42,41 +51,33 @@ signals:
 	void positionChanged();
 
 protected:
-	// Support dragging with the left mouse button.
-	void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
-
-	// Cursor hover events: highlight the node border and the hovered port.
 	void hoverEnterEvent(QGraphicsSceneHoverEvent* event) override;
 	void hoverLeaveEvent(QGraphicsSceneHoverEvent* event) override;
-	void hoverMoveEvent(QGraphicsSceneHoverEvent* event) override;
 
 	// Notify subscribers about a node position change (to redraw connections).
 	QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
 
+private slots:
+	void onPortHoverChanged(bool hovered);
+
 private:
 	void relayout();
-	void updateHoveredPort(const QPointF& localPos);
-
-	QPointF inputPortCenter(int index) const;
-	QPointF outputPortCenter(int index) const;
 
 	void paintBody(QPainter* painter) const;
 	void paintHeader(QPainter* painter) const;
-	void paintPorts(QPainter* painter) const;
 
 	QVariant _id;
 	QString _title;
-	QVector<Port> _inputs;
-	QVector<Port> _outputs;
+	QVector<PortItem*> _inputs;
+	QVector<PortItem*> _outputs;
 
 	// Current geometric size of the node.
 	double _width = 0.0;
 	double _height = 0.0;
 
 	// Cursor hover state.
-	bool _hovered = false;   // cursor over the node
-	int _hoveredInput = -1;  // index of hovered input, -1 = none
-	int _hoveredOutput = -1; // index of hovered output, -1 = none
+	bool _hovered = false;     // cursor over the node body
+	int _hoveredPortCount = 0; // ports currently under the cursor, TODO: replace with bool
 };
 
 } // namespace QNodeFlow

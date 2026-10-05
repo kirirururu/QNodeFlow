@@ -7,11 +7,13 @@ target_sources(QNodeFlow PRIVATE
 	ConnectionItem.cpp
 	NodeItem.cpp
 	NodeView.cpp
+	PortItem.cpp
 )
 target_sources(QNodeFlow PRIVATE
 	${PRIVATE_INCLUDE_DIR}/ConnectionItem.h
 	${PRIVATE_INCLUDE_DIR}/NodeItem.h
 	${PRIVATE_INCLUDE_DIR}/NodeView.h
+	${PRIVATE_INCLUDE_DIR}/PortItem.h
 )
 
 target_include_directories(QNodeFlow INTERFACE ${PUBLIC_INCLUDE_DIR} PRIVATE ${PRIVATE_INCLUDE_DIR})
