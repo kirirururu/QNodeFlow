@@ -1,9 +1,9 @@
 #pragma once
 
-#include "NodeId.h"
-
 #include <QGraphicsView>
 #include <QList>
+
+#include <map>
 
 class QGraphicsScene;
 
@@ -12,27 +12,17 @@ namespace QNodeFlow {
 class NodeItem;
 class ConnectionItem;
 
-class NodeIdWrapper
+namespace detail {
+
+struct NodeIdComparator
 {
-public:
-	explicit NodeIdWrapper(const BasicNodeId& id) : id_(id.clone()) { }
-
-	NodeIdWrapper(const NodeIdWrapper& other) : id_(other.id_->clone()) { }
-	NodeIdWrapper& operator=(const NodeIdWrapper& other)
+	bool operator()(const QVariant& lhs, const QVariant& rhs) const
 	{
-		if (this != &other)
-			id_ = other.id_->clone();
-		return *this;
+		return QVariant::compare(lhs, rhs) == QPartialOrdering::Less;
 	}
-
-	NodeIdWrapper(NodeIdWrapper&& other) noexcept = default;
-	NodeIdWrapper& operator=(NodeIdWrapper&& other) noexcept = default;
-
-	bool operator<(const NodeIdWrapper& other) const { return id_->lessThan(*other.id_); }
-
-private:
-	BasicNodeId::Ptr id_;
 };
+
+} // namespace detail
 
 /**
  * QGraphicsView displaying a graph of nodes (NodeItem) and connections (ConnectionItem).
@@ -48,20 +38,49 @@ class NodeView : public QGraphicsView
 	Q_OBJECT
 
 public:
-	explicit NodeView(QWidget* parent = nullptr);
+	explicit NodeView(QMetaType keyMetaType, QWidget* parent = nullptr);
 	~NodeView() override;
 
-	void addNode(const BasicNodeId& id, NodeItem* node);
-	void addConnection(ConnectionItem* connection);
-	void removeNode(const BasicNodeId& id);
-	void removeConnection(ConnectionItem* connection);
+	void addNode(const QVariant& id, NodeItem* node);
+	NodeItem* findNode(const QVariant& id) const;
+	void removeNode(const QVariant& id);
+
+	void addConnection(const QVariant& sourceId,
+	                   int sourcePort,
+	                   const QVariant& destinationId,
+	                   int destinationPort);
+	void addConnection(NodeItem* source, int sourcePort, NodeItem* destination, int destinationPort);
+
+	void removeConnection(const QVariant& sourceId,
+	                      int sourcePort,
+	                      const QVariant& destinationId,
+	                      int destinationPort);
+	void removeConnection(NodeItem* source, int sourcePort, NodeItem* destination, int destinationPort);
+
+	template <typename IdType>
+	static NodeView* create(QWidget* parent = nullptr)
+	{
+		return new NodeView(QMetaType::fromType<IdType>(), parent);
+	}
+
+signals:
+	void connectionAdded(const QVariant& sourceId,
+	                     int sourcePort,
+	                     const QVariant& destinationId,
+	                     int destinationPort);
+	void connectionRemoved(const QVariant& sourceId,
+	                       int sourcePort,
+	                       const QVariant& destinationId,
+	                       int destinationPort);
 
 private:
-	void removeConnectionsForNode(NodeItem* node);
-	void recalcSceneRect();
+	void removeConnectionsForNode(const NodeItem* node);
+	void recalcSceneRect() const;
+	void checkIdType(const QVariant& id) const;
 
+	QMetaType _idMetaType;
 	QGraphicsScene* _scene;
-	QMap<NodeIdWrapper, NodeItem*> _nodes;
+	std::map<QVariant, NodeItem*, detail::NodeIdComparator> _nodes;
 	QList<ConnectionItem*> _connections;
 };
 

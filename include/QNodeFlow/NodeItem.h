@@ -21,7 +21,9 @@ public:
 		QString name;
 	};
 
-	explicit NodeItem(const QString& title, QGraphicsItem* parent = nullptr);
+	NodeItem(QVariant id, const QString& title, QGraphicsItem* parent = nullptr);
+
+	QVariant id() const;
 
 	void setTitle(const QString& title);
 	void setInputs(const QVector<Port>& ports);
@@ -62,6 +64,7 @@ private:
 	void paintHeader(QPainter* painter) const;
 	void paintPorts(QPainter* painter) const;
 
+	QVariant _id;
 	QString _title;
 	QVector<Port> _inputs;
 	QVector<Port> _outputs;

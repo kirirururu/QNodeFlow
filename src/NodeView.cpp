@@ -8,8 +8,10 @@
 
 namespace QNodeFlow {
 
-NodeView::NodeView(QWidget* parent) : QGraphicsView(parent), _scene(new QGraphicsScene(this))
+NodeView::NodeView(QMetaType keyMetaType, QWidget* parent)
+    : QGraphicsView(parent), _idMetaType(keyMetaType), _scene(new QGraphicsScene(this))
 {
+	Q_ASSERT(_idMetaType.id() != QMetaType::UnknownType);
 	setScene(_scene);
 	setRenderHint(QPainter::Antialiasing, true);
 	setDragMode(QGraphicsView::NoDrag); // the node itself is dragged, not the scene
@@ -21,56 +23,105 @@ NodeView::NodeView(QWidget* parent) : QGraphicsView(parent), _scene(new QGraphic
 NodeView::~NodeView()
 {
 	// Connections first (they reference nodes), then the nodes themselves.
-	qDeleteAll(_connections);
-	qDeleteAll(_nodes);
+	for (const auto& connection : _connections)
+		connection->deleteLater();
+	for (const auto& [id, node] : _nodes)
+		node->deleteLater();
 }
 
-void NodeView::addNode(const BasicNodeId& id, NodeItem* node)
+void NodeView::addNode(const QVariant& id, NodeItem* node)
 {
+	checkIdType(id);
 	if (node == nullptr)
 		throw std::invalid_argument("node is nullptr");
-	const NodeIdWrapper idw(id);
-	if (_nodes.contains(idw))
+	if (_nodes.find(id) != _nodes.end())
 		throw std::invalid_argument("duplicate node id");
-	_nodes.insert(idw, node);
+	_nodes.insert({id, node});
 	_scene->addItem(node);
 	recalcSceneRect();
 }
 
-void NodeView::addConnection(ConnectionItem* connection)
+NodeItem* NodeView::findNode(const QVariant& id) const
 {
-	if (connection == nullptr)
+	checkIdType(id);
+	if (const auto iter = _nodes.find(id); iter != _nodes.end())
+		return iter->second;
+	return nullptr;
+}
+
+void NodeView::removeNode(const QVariant& id)
+{
+	checkIdType(id);
+	const auto nodeIter = _nodes.find(id);
+	if (nodeIter == _nodes.end())
 		return;
+	auto* node = nodeIter->second;
+	removeConnectionsForNode(node);
+	_scene->removeItem(node);
+	node->deleteLater();
+	_nodes.erase(nodeIter);
+	recalcSceneRect();
+}
+
+void NodeView::addConnection(const QVariant& sourceId,
+                             int sourcePort,
+                             const QVariant& destinationId,
+                             int destinationPort)
+{
+	const auto source = findNode(sourceId);
+	if (!source)
+		throw std::runtime_error("source node not found");
+	const auto destination = findNode(destinationId);
+	if (!destination)
+		throw std::runtime_error("destination node not found");
+	addConnection(source, sourcePort, destination, destinationPort);
+}
+
+void NodeView::addConnection(NodeItem* source, int sourcePort, NodeItem* destination, int destinationPort)
+{
+	if (source == nullptr || destination == nullptr)
+		throw std::invalid_argument("source or destination node is nullptr");
+
+	// TODO: check that port indexes are valid
+
+	const auto connection = new ConnectionItem(
+	    ConnectionItem::PortRef{.node = source, .isInput = false, .index = sourcePort},
+	    ConnectionItem::PortRef{.node = destination, .isInput = true, .index = destinationPort});
 	_scene->addItem(connection);
 	_connections.append(connection);
 	recalcSceneRect();
 }
 
-void NodeView::removeNode(const BasicNodeId& id)
+void NodeView::removeConnection(const QVariant& sourceId,
+                                int sourcePort,
+                                const QVariant& destinationId,
+                                int destinationPort)
 {
-	const NodeIdWrapper idw(id);
-	auto nodeIter = _nodes.find(idw);
-	if (nodeIter == _nodes.end())
-		return;
+	const auto source = findNode(sourceId);
+	if (!source)
+		throw std::runtime_error("source node not found");
+	const auto destination = findNode(destinationId);
+	if (!destination)
+		throw std::runtime_error("destination node not found");
 
-	removeConnectionsForNode(*nodeIter);
-	_scene->removeItem(*nodeIter);
-	_nodes.remove(idw);
-	delete *nodeIter;
-	recalcSceneRect();
+	removeConnection(source, sourcePort, destination, destinationPort);
 }
 
-void NodeView::removeConnection(ConnectionItem* connection)
+void NodeView::removeConnection(NodeItem* source,
+                                int sourcePort,
+                                NodeItem* destination,
+                                int destinationPort)
 {
-	if (connection == nullptr)
-		return;
+	const auto connection = new ConnectionItem(
+	    ConnectionItem::PortRef{.node = source, .isInput = false, .index = sourcePort},
+	    ConnectionItem::PortRef{.node = destination, .isInput = true, .index = destinationPort});
 	_scene->removeItem(connection);
 	_connections.removeOne(connection);
 	delete connection;
 	recalcSceneRect();
 }
 
-void NodeView::removeConnectionsForNode(NodeItem* node)
+void NodeView::removeConnectionsForNode(const NodeItem* node)
 {
 	for (auto it = _connections.begin(); it != _connections.end();)
 	{
@@ -88,12 +139,12 @@ void NodeView::removeConnectionsForNode(NodeItem* node)
 	}
 }
 
-void NodeView::recalcSceneRect()
+void NodeView::recalcSceneRect() const
 {
-	const qreal margin = 120.0; // margin to allow dragging nodes past the edges
+	constexpr qreal margin = 120.0; // margin to allow dragging nodes past the edges
 
 	QRectF rect;
-	for (QGraphicsItem* item : _scene->items())
+	for (const QGraphicsItem* item : _scene->items())
 	{
 		QRectF r = item->sceneBoundingRect();
 		rect = rect.isNull() ? r : rect.united(r);
@@ -102,6 +153,14 @@ void NodeView::recalcSceneRect()
 		rect = QRectF(0.0, 0.0, 800.0, 520.0);
 
 	_scene->setSceneRect(rect.adjusted(-margin, -margin, margin, margin));
+}
+
+void NodeView::checkIdType(const QVariant& id) const
+{
+	Q_PRE_X(id.metaType() == _idMetaType, QString("Invalid node id type (expected %1, got %2)")
+	                                          .arg(_idMetaType.name(), id.metaType().name())
+	                                          .toStdString()
+	                                          .c_str());
 }
 
 } // namespace QNodeFlow

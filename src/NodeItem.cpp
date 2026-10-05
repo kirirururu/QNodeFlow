@@ -68,13 +68,18 @@ bool isPortHovered(const QPointF& center, const QPointF& localPos)
 
 namespace QNodeFlow {
 
-NodeItem::NodeItem(const QString& title, QGraphicsItem* parent)
-    : QGraphicsObject(parent), _title(title)
+NodeItem::NodeItem(QVariant id, const QString& title, QGraphicsItem* parent)
+    : QGraphicsObject(parent), _id(std::move(id)), _title(title)
 {
 	setFlag(QGraphicsItem::ItemIsMovable, true);
 	setFlag(QGraphicsItem::ItemSendsGeometryChanges, true);
 	setAcceptHoverEvents(true);
 	relayout();
+}
+
+QVariant NodeItem::id() const
+{
+	return _id;
 }
 
 void NodeItem::setTitle(const QString& title)
@@ -95,31 +100,6 @@ void NodeItem::setOutputs(const QVector<Port>& ports)
 	relayout();
 }
 
-QRectF NodeItem::boundingRect() const
-{
-	// Account for ports protruding past the body edge and the outline thickness.
-	const double margin = PORT_RADIUS - BODY_BORDER_WIDTH / 2 + 3.0;
-	return QRectF(QPointF(0, 0), QSizeF(_width, _height)).adjusted(-margin, -margin, margin, margin);
-}
-
-QPointF NodeItem::inputPortCenter(int index) const
-{
-	if (index < 0 || index >= _inputs.size())
-		return QPointF();
-	return QPointF(BODY_BORDER_WIDTH / 2 - PORT_LINE_WIDTH / 2,
-	               BODY_BORDER_WIDTH + HEADER_HEIGHT + PORTS_TOP_PADDING + PORT_RADIUS +
-	                   ROW_HEIGHT * index);
-}
-
-QPointF NodeItem::outputPortCenter(int index) const
-{
-	if (index < 0 || index >= _outputs.size())
-		return QPointF();
-	return QPointF(_width - (BODY_BORDER_WIDTH / 2 - PORT_LINE_WIDTH / 2),
-	               BODY_BORDER_WIDTH + HEADER_HEIGHT + PORTS_TOP_PADDING + PORT_RADIUS +
-	                   ROW_HEIGHT * index);
-}
-
 QPointF NodeItem::inputScenePos(int index) const
 {
 	return mapToScene(inputPortCenter(index));
@@ -130,13 +110,19 @@ QPointF NodeItem::outputScenePos(int index) const
 	return mapToScene(outputPortCenter(index));
 }
 
-void NodeItem::relayout()
+QRectF NodeItem::boundingRect() const
 {
-	const int rows = qMax(qMax(_inputs.size(), _outputs.size()), static_cast<int>(MIN_BODY_ROWS));
-	_width = BODY_WIDTH;
-	_height = HEADER_HEIGHT + ROW_HEIGHT * rows + BOTTOM_PADDING;
-	prepareGeometryChange();
-	update();
+	// Account for ports protruding past the body edge and the outline thickness.
+	const double margin = PORT_RADIUS - BODY_BORDER_WIDTH / 2 + 3.0;
+	return QRectF(QPointF(0, 0), QSizeF(_width, _height)).adjusted(-margin, -margin, margin, margin);
+}
+
+void NodeItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
+{
+	painter->setRenderHint(QPainter::Antialiasing, true);
+	paintBody(painter);
+	paintHeader(painter);
+	paintPorts(painter);
 }
 
 void NodeItem::mousePressEvent(QGraphicsSceneMouseEvent* event)
@@ -148,13 +134,6 @@ void NodeItem::mousePressEvent(QGraphicsSceneMouseEvent* event)
 		return;
 	}
 	QGraphicsItem::mousePressEvent(event);
-}
-
-QVariant NodeItem::itemChange(GraphicsItemChange change, const QVariant& value)
-{
-	if (change == ItemPositionHasChanged)
-		emit positionChanged();
-	return QGraphicsItem::itemChange(change, value);
 }
 
 void NodeItem::hoverEnterEvent(QGraphicsSceneHoverEvent* event)
@@ -178,6 +157,22 @@ void NodeItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event)
 {
 	updateHoveredPort(mapFromScene(event->scenePos()));
 	QGraphicsItem::hoverMoveEvent(event);
+}
+
+QVariant NodeItem::itemChange(GraphicsItemChange change, const QVariant& value)
+{
+	if (change == ItemPositionHasChanged)
+		emit positionChanged();
+	return QGraphicsItem::itemChange(change, value);
+}
+
+void NodeItem::relayout()
+{
+	const int rows = qMax(qMax(_inputs.size(), _outputs.size()), static_cast<int>(MIN_BODY_ROWS));
+	_width = BODY_WIDTH;
+	_height = HEADER_HEIGHT + ROW_HEIGHT * rows + BOTTOM_PADDING;
+	prepareGeometryChange();
+	update();
 }
 
 void NodeItem::updateHoveredPort(const QPointF& localPos)
@@ -210,12 +205,22 @@ void NodeItem::updateHoveredPort(const QPointF& localPos)
 	}
 }
 
-void NodeItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
+QPointF NodeItem::inputPortCenter(int index) const
 {
-	painter->setRenderHint(QPainter::Antialiasing, true);
-	paintBody(painter);
-	paintHeader(painter);
-	paintPorts(painter);
+	if (index < 0 || index >= _inputs.size())
+		return QPointF();
+	return QPointF(BODY_BORDER_WIDTH / 2 - PORT_LINE_WIDTH / 2,
+	               BODY_BORDER_WIDTH + HEADER_HEIGHT + PORTS_TOP_PADDING + PORT_RADIUS +
+	                   ROW_HEIGHT * index);
+}
+
+QPointF NodeItem::outputPortCenter(int index) const
+{
+	if (index < 0 || index >= _outputs.size())
+		return QPointF();
+	return QPointF(_width - (BODY_BORDER_WIDTH / 2 - PORT_LINE_WIDTH / 2),
+	               BODY_BORDER_WIDTH + HEADER_HEIGHT + PORTS_TOP_PADDING + PORT_RADIUS +
+	                   ROW_HEIGHT * index);
 }
 
 void NodeItem::paintBody(QPainter* painter) const

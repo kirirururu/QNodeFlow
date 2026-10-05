@@ -6,6 +6,7 @@ project(QNodeFlow LANGUAGES CXX)
 option(QNODEFLOW_BUILD_EXAMPLE "Build example application" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 find_package(Qt6 COMPONENTS Core Gui Widgets REQUIRED)
 set(CMAKE_AUTOMOC ON)
