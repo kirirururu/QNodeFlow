@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QDebug>
+#include <QMainWindow>
 
 using namespace QNodeFlow;
 
@@ -11,9 +12,10 @@ int main(int argc, char* argv[])
 {
 	QApplication a(argc, argv);
 
-	NodeView view;
-	view.setWindowTitle(QStringLiteral("QNodeFlow"));
+	QMainWindow window;
+	window.setWindowTitle(QStringLiteral("QNodeFlow"));
 
+	NodeView* view = new NodeView;
 	NodeItem* node1 = new NodeItem(QStringLiteral("Node name"));
 	node1->setInputs({
 	    NodeItem::Port{QStringLiteral("input 1")},
@@ -26,7 +28,7 @@ int main(int argc, char* argv[])
 	    NodeItem::Port{QStringLiteral("output 2")},
 	});
 	node1->setPos(60.0, 60.0);
-	view.addNode(NodeId<QString>("node1"), node1);
+	view->addNode(NodeId<QString>("node1"), node1);
 
 	// Second test node — to check a scene with multiple nodes.
 	NodeItem* node2 = new NodeItem(QStringLiteral("Node 2"));
@@ -37,15 +39,16 @@ int main(int argc, char* argv[])
 	    NodeItem::Port{QStringLiteral("out")},
 	});
 	node2->setPos(460.0, 260.0);
-	view.addNode(NodeId<QString>("node2"), node2);
+	view->addNode(NodeId<QString>("node2"), node2);
 
 	// Connection: output 0 of the first node -> input 0 of the second node.
 	ConnectionItem* connection =
 	    new ConnectionItem(ConnectionItem::PortRef{node1, false, 0}, // output of node1
 	                       ConnectionItem::PortRef{node2, true, 0}); // input of node2
-	view.addConnection(connection);
+	view->addConnection(connection);
 
-	view.showMaximized();
+	window.setCentralWidget(view);
+	window.showMaximized();
 
 	return QApplication::exec();
 }
