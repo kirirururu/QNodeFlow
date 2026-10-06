@@ -45,6 +45,9 @@ int main(int argc, char* argv[])
 	view->addConnection(node1, 0, node2, 0);
 	view->addConnection(node1, 1, node2, 1);
 
+	view->addConnection(node2, 0, node3, 0);
+	view->removeConnection(node2, 0, node3, 0);
+
 	window.setCentralWidget(view);
 	window.showMaximized();
 

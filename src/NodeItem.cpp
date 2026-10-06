@@ -40,8 +40,7 @@ qreal getPortY(int index)
 
 } // namespace
 
-NodeItem::NodeItem(QVariant id, const QString& title, QGraphicsItem* parent)
-    : QGraphicsObject(parent), _id(std::move(id)), _title(title)
+NodeItem::NodeItem(QVariant id, const QString& title) : _id(std::move(id)), _title(title)
 {
 	setFlag(ItemIsMovable, true);
 	setFlag(ItemSendsGeometryChanges, true);

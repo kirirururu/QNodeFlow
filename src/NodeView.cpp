@@ -2,6 +2,7 @@
 
 #include "ConnectionItem.h"
 #include "NodeItem.h"
+#include "PortItem.h"
 
 #include <QGraphicsScene>
 #include <QPainter>
@@ -82,11 +83,12 @@ void NodeView::addConnection(NodeItem* source, int sourcePort, NodeItem* destina
 	if (source == nullptr || destination == nullptr)
 		throw std::invalid_argument("source or destination node is nullptr");
 
-	// TODO: check that port indexes are valid
+	const auto srcPort = source->outputPort(sourcePort);
+	const auto dstPort = destination->inputPort(destinationPort);
+	if (!srcPort || !dstPort)
+		throw std::invalid_argument("invalid source or destination port index");
 
-	const auto connection = new ConnectionItem(
-	    ConnectionItem::PortRef{.node = source, .isInput = false, .index = sourcePort},
-	    ConnectionItem::PortRef{.node = destination, .isInput = true, .index = destinationPort});
+	const auto connection = new ConnectionItem(srcPort, dstPort);
 	_scene->addItem(connection);
 	_connections.append(connection);
 	recalcSceneRect();
@@ -112,12 +114,22 @@ void NodeView::removeConnection(NodeItem* source,
                                 NodeItem* destination,
                                 int destinationPort)
 {
-	const auto connection = new ConnectionItem(
-	    ConnectionItem::PortRef{.node = source, .isInput = false, .index = sourcePort},
-	    ConnectionItem::PortRef{.node = destination, .isInput = true, .index = destinationPort});
-	_scene->removeItem(connection);
-	_connections.removeOne(connection);
-	delete connection;
+	const auto srcPort = source->outputPort(sourcePort);
+	const auto dstPort = destination->inputPort(destinationPort);
+	if (!srcPort || !dstPort)
+		throw std::invalid_argument("invalid source or destination port index");
+
+	ConnectionItem target{srcPort, dstPort};
+	auto iter =
+	    std::find_if(_connections.begin(), _connections.end(),
+	                 [&target](const ConnectionItem* connection) { return *connection == target; });
+	if (iter != _connections.end())
+	{
+		ConnectionItem* connection = *iter;
+		_scene->removeItem(connection);
+		_connections.erase(iter);
+		connection->deleteLater();
+	}
 	recalcSceneRect();
 }
 
@@ -126,7 +138,7 @@ void NodeView::removeConnectionsForNode(const NodeItem* node)
 	for (auto it = _connections.begin(); it != _connections.end();)
 	{
 		ConnectionItem* connection = *it;
-		if (connection->from().node == node || connection->to().node == node)
+		if (connection->from()->parentItem() == node || connection->to()->parentItem() == node)
 		{
 			_scene->removeItem(connection);
 			it = _connections.erase(it);

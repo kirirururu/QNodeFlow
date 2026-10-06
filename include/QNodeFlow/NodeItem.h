@@ -26,7 +26,7 @@ public:
 		QString name;
 	};
 
-	NodeItem(QVariant id, const QString& title, QGraphicsItem* parent = nullptr);
+	NodeItem(QVariant id, const QString& title);
 
 	QVariant id() const;
 
