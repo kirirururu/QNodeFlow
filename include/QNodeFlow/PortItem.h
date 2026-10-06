@@ -7,6 +7,8 @@ class QGraphicsSceneHoverEvent;
 
 namespace QNodeFlow {
 
+class NodeItem;
+
 enum class PortDirection
 {
 	Input,
@@ -23,11 +25,12 @@ class PortItem : public QGraphicsObject
 	Q_OBJECT
 
 public:
-	PortItem(PortDirection direction, int index, const QString& name, QGraphicsItem* parent = nullptr);
+	PortItem(PortDirection direction, int index, const QString& name, NodeItem* parent = nullptr);
 
-	PortDirection direction() const { return _direction; }
-	int index() const { return _index; }
-	QString name() const { return _name; }
+	PortDirection direction() const;
+	int index() const;
+	QString name() const;
+	NodeItem* node() const;
 
 	// Port center in scene coordinates.
 	QPointF scenePos() const;
