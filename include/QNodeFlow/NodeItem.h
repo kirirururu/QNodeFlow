@@ -2,6 +2,7 @@
 
 #include <QGraphicsObject>
 #include <QString>
+#include <QVariant>
 #include <QVector>
 
 class QGraphicsSceneHoverEvent;
@@ -41,6 +42,9 @@ public:
 
 	PortItem* inputPort(int index) const;
 	PortItem* outputPort(int index) const;
+
+	int inputsCount() const;
+	int outputsCount() const;
 
 	QRectF boundingRect() const override;
 	void paint(QPainter* painter,

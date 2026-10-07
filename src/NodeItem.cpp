@@ -107,6 +107,16 @@ PortItem* NodeItem::outputPort(int index) const
 	return _outputs[index];
 }
 
+int NodeItem::inputsCount() const
+{
+	return _inputs.size();
+}
+
+int NodeItem::outputsCount() const
+{
+	return _outputs.size();
+}
+
 QRectF NodeItem::boundingRect() const
 {
 	// Margin so the border pen is not clipped; ports are child items with
