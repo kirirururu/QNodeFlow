@@ -4,13 +4,15 @@
 
 namespace QNodeFlow {
 
+class PortItem;
+
 /**
  * A lightweight line shown while a connection is being dragged from an output port.
  */
 class TemporaryConnectionItem : public QGraphicsItem
 {
 public:
-	explicit TemporaryConnectionItem(const QPointF& from);
+	explicit TemporaryConnectionItem(PortItem* from);
 
 	void setTo(const QPointF& to);
 
@@ -18,7 +20,7 @@ public:
 	void paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) override;
 
 private:
-	QPointF _from;
+	PortItem* _from;
 	QPointF _target;
 	bool _hasTarget = false;
 };

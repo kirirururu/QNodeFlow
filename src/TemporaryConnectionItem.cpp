@@ -12,7 +12,7 @@ constexpr QColor TEMP_LINE_COLOR(120, 160, 200); // color of the line being draw
 }
 } // namespace
 
-TemporaryConnectionItem::TemporaryConnectionItem(const QPointF& from) : _from(from)
+TemporaryConnectionItem::TemporaryConnectionItem(PortItem* from) : _from(from)
 {
 	setZValue(1.0); // draw on top of everything
 }

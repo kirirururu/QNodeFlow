@@ -203,7 +203,7 @@ void NodeView::startConnectionDrag(const QPointF& scenePos)
 
 	_dragTarget = nullptr;
 
-	_tempConnection = new TemporaryConnectionItem(_dragSource->scenePos());
+	_tempConnection = new TemporaryConnectionItem(_dragSource);
 	_scene->addItem(_tempConnection);
 }
 

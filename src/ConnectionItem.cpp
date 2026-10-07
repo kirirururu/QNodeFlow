@@ -14,6 +14,7 @@ constexpr double LINE_WIDTH = 2.0;                // line thickness
 constexpr double CORNER_RADIUS = 8.0;             // corner rounding radius
 constexpr double PORT_STUB = 30.0;                // fixed length of the segment near a port
 constexpr double MIN_FORWARD_GAP = 2 * PORT_STUB; // min x2 - x1 for the forward variant
+constexpr double PARALLEL_LINES_GAP = 20;         // gap between two parallel connections
 
 // Returns the unit vector in direction d ((0, 0) for a zero d).
 QPointF unitVector(const QPointF& d)
@@ -75,15 +76,23 @@ void ConnectionItem::refresh()
 	update();
 }
 
-QPainterPath ConnectionItem::buildPath(const QPointF& a, const QPointF& b)
+QPainterPath ConnectionItem::buildPath(const PortItem* from, const QPointF& to)
 {
+	const auto a = from->scenePos();
+	const auto b = to;
+
+	// Add a horizontal shift to avoid overlapping
+	double xShift = from->index() * PARALLEL_LINES_GAP;
+
 	QVector<QPointF> pts;
-	if (b.x() - a.x() > MIN_FORWARD_GAP)
+	if (b.x() - a.x() > MIN_FORWARD_GAP + xShift * 2)
 	{
 		// Forward case: the receiver is far enough to the right of the source. The
 		// middle (vertical) segment sits at the center between the nodes, the side
 		// segments span half the distance (they change with distance). All corners 90°.
-		const double midX = (a.x() + b.x()) / 2.0;
+		if (b.y() > a.y())
+			xShift *= -1;
+		const double midX = (a.x() + b.x()) / 2.0 + xShift;
 		pts = {a, QPointF(midX, a.y()), QPointF(midX, b.y()), b};
 	}
 	else
@@ -93,8 +102,8 @@ QPainterPath ConnectionItem::buildPath(const QPointF& a, const QPointF& b)
 		// line passes between the nodes and stays visible.
 		// An output port (right) leads the line to the right, an input (left) to the left.
 		// The segments near the ports point outward and have a fixed length.
-		const auto p1 = QPointF(a.x() + PORT_STUB, a.y());
-		const auto p2 = QPointF(b.x() - PORT_STUB, b.y());
+		const auto p1 = QPointF(a.x() + PORT_STUB + xShift, a.y());
+		const auto p2 = QPointF(b.x() - PORT_STUB - xShift, b.y());
 
 		const double midY = (a.y() + b.y()) / 2.0;
 		pts = {a, p1, QPointF(p1.x(), midY), QPointF(p2.x(), midY), p2, b};
@@ -105,9 +114,7 @@ QPainterPath ConnectionItem::buildPath(const QPointF& a, const QPointF& b)
 QRectF ConnectionItem::boundingRect() const
 {
 	constexpr double margin = LINE_WIDTH + 2.0;
-	return buildPath(_from->scenePos(), _to->scenePos())
-	    .boundingRect()
-	    .adjusted(-margin, -margin, margin, margin);
+	return buildPath(_from, _to->scenePos()).boundingRect().adjusted(-margin, -margin, margin, margin);
 }
 
 void ConnectionItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
@@ -118,7 +125,7 @@ void ConnectionItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, Q
 	pen.setCapStyle(Qt::RoundCap);
 	painter->setPen(pen);
 	painter->setBrush(Qt::NoBrush);
-	painter->drawPath(buildPath(_from->scenePos(), _to->scenePos()));
+	painter->drawPath(buildPath(_from, _to->scenePos()));
 }
 
 bool operator==(const ConnectionItem& lhs, const ConnectionItem& rhs)

@@ -29,7 +29,7 @@ public:
 
 	// Builds the connection path between two scene-space points.
 	// `a` is the output port, `b` is the input port.
-	static QPainterPath buildPath(const QPointF& a, const QPointF& b);
+	static QPainterPath buildPath(const PortItem* from, const QPointF& to);
 
 	friend bool operator==(const ConnectionItem& lhs, const ConnectionItem& rhs);
 	friend bool operator!=(const ConnectionItem& lhs, const ConnectionItem& rhs);
