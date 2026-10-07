@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QGraphicsObject>
+#include <QPointF>
 
 class QPainterPath;
 
@@ -26,6 +27,10 @@ public:
 	           const QStyleOptionGraphicsItem* option,
 	           QWidget* widget = nullptr) override;
 
+	// Builds the connection path between two scene-space points.
+	// `a` is the output port, `b` is the input port.
+	static QPainterPath buildPath(const QPointF& a, const QPointF& b);
+
 	friend bool operator==(const ConnectionItem& lhs, const ConnectionItem& rhs);
 	friend bool operator!=(const ConnectionItem& lhs, const ConnectionItem& rhs);
 
@@ -33,8 +38,6 @@ private slots:
 	void refresh();
 
 private:
-	QPainterPath buildPath() const;
-
 	PortItem* _from;
 	PortItem* _to;
 };

@@ -2,6 +2,7 @@
 
 #include <QGraphicsView>
 #include <QList>
+#include <QPointF>
 
 #include <map>
 
@@ -11,6 +12,8 @@ namespace QNodeFlow {
 
 class NodeItem;
 class ConnectionItem;
+class PortItem;
+class TemporaryConnectionItem;
 
 namespace detail {
 
@@ -73,15 +76,30 @@ signals:
 	                       const QVariant& destinationId,
 	                       int destinationPort);
 
+protected:
+	// Tracks connection drawing: press on an output port, move, release on an input port.
+	bool viewportEvent(QEvent* event) override;
+
 private:
 	void removeConnectionsForNode(const NodeItem* node);
 	void recalcSceneRect() const;
 	void checkIdType(const QVariant& id) const;
 
+	// Connection-drawing state (drag from an output port to an input port).
+	void startConnectionDrag(const QPointF& scenePos);
+	void updateConnectionDrag(const QPointF& scenePos);
+	void finishConnectionDrag();
+	PortItem* findPortAtPosition(const QPointF& scenePos) const;
+
 	QMetaType _idMetaType;
 	QGraphicsScene* _scene;
 	std::map<QVariant, NodeItem*, detail::NodeIdComparator> _nodes;
 	QList<ConnectionItem*> _connections;
+
+	// Active connection being drawn, if any.
+	TemporaryConnectionItem* _tempConnection = nullptr;
+	PortItem* _dragSource = nullptr;
+	PortItem* _dragTarget = nullptr;
 };
 
 } // namespace QNodeFlow

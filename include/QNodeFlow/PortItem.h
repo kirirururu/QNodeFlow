@@ -1,9 +1,11 @@
 #pragma once
 
 #include <QGraphicsObject>
+#include <QPointF>
 #include <QString>
 
 class QGraphicsSceneHoverEvent;
+class QGraphicsSceneMouseEvent;
 
 namespace QNodeFlow {
 
@@ -19,6 +21,11 @@ enum class PortDirection
  * A single node port (circle + label), a child item of NodeItem.
  *
  * The item's local origin is the port center, so scenePos() is the port center.
+ *
+ * Output ports are the start of connection drawing: pressing the left mouse button on
+ * one and dragging to an input port creates a connection. The press is accepted here
+ * (so the movable node does not start dragging); the drag itself is tracked by the
+ * owning NodeView.
  */
 class PortItem : public QGraphicsObject
 {
@@ -34,6 +41,9 @@ public:
 
 	// Port center in scene coordinates.
 	QPointF scenePos() const;
+
+	// Highlights the port as a valid drop target during connection drawing.
+	void setTargeted(bool targeted);
 
 	QRectF boundingRect() const override;
 	void paint(QPainter* painter,
@@ -56,7 +66,9 @@ private:
 	int _index;
 	QString _name;
 
-	bool _hovered = false;
+	// hovered property for different modes
+	bool _hovered = false;  // normal mode
+	bool _targeted = false; // connection drawing mode
 };
 
 } // namespace QNodeFlow

@@ -4,6 +4,7 @@
 #include "Style.h"
 
 #include <QGraphicsSceneHoverEvent>
+#include <QGraphicsSceneMouseEvent>
 #include <QPainter>
 
 namespace QNodeFlow {
@@ -39,6 +40,14 @@ QPointF PortItem::scenePos() const
 	return mapToScene(QPointF(0.0, 0.0));
 }
 
+void PortItem::setTargeted(bool targeted)
+{
+	if (_targeted == targeted)
+		return;
+	_targeted = targeted;
+	update();
+}
+
 QRectF PortItem::boundingRect() const
 {
 	constexpr double half = PORT_RADIUS + PORT_LINE_WIDTH / 2;
@@ -59,8 +68,9 @@ void PortItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 	                                                     : Qt::AlignVCenter | Qt::AlignRight,
 	                  _name);
 
-	const QColor border = _hovered ? color::PORT_BORDER_HOVER : color::PORT_BORDER;
-	const QColor fill = _hovered ? color::PORT_FILL_HOVER : color::PORT_FILL;
+	const bool highlighted = _hovered || _targeted;
+	const QColor border = highlighted ? color::PORT_BORDER_HOVER : color::PORT_BORDER;
+	const QColor fill = highlighted ? color::PORT_FILL_HOVER : color::PORT_FILL;
 	painter->setPen(QPen(border, PORT_LINE_WIDTH));
 	painter->setBrush(QBrush(fill));
 	painter->drawEllipse(QPointF(0.0, 0.0), PORT_RADIUS, PORT_RADIUS);

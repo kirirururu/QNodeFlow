@@ -3,8 +3,10 @@
 #include "ConnectionItem.h"
 #include "NodeItem.h"
 #include "PortItem.h"
+#include "TemporaryConnectionItem.h"
 
 #include <QGraphicsScene>
+#include <QMouseEvent>
 #include <QPainter>
 
 namespace QNodeFlow {
@@ -28,6 +30,9 @@ NodeView::~NodeView()
 		connection->deleteLater();
 	for (const auto& [id, node] : _nodes)
 		node->deleteLater();
+
+	if (_tempConnection)
+		delete _tempConnection;
 }
 
 void NodeView::addNode(const QVariant& id, NodeItem* node)
@@ -149,6 +154,104 @@ void NodeView::removeConnectionsForNode(const NodeItem* node)
 			++it;
 		}
 	}
+}
+
+bool NodeView::viewportEvent(QEvent* event)
+{
+	// The viewport implicitly captures the mouse while a button is held, so it
+	// receives all move/release events of an in-progress drag.
+	switch (event->type())
+	{
+	case QEvent::MouseButtonPress:
+	{
+		const auto* mouseEvent = static_cast<QMouseEvent*>(event);
+		if (mouseEvent->button() == Qt::LeftButton)
+			startConnectionDrag(mapToScene(mouseEvent->pos()));
+		break;
+	}
+	case QEvent::MouseMove:
+	{
+		if (_dragSource)
+			updateConnectionDrag(mapToScene(static_cast<QMouseEvent*>(event)->pos()));
+		break;
+	}
+	case QEvent::MouseButtonRelease:
+	{
+		const auto* mouseEvent = static_cast<QMouseEvent*>(event);
+		if (mouseEvent->button() == Qt::LeftButton && _dragSource)
+			finishConnectionDrag();
+		break;
+	}
+	default:
+		break;
+	}
+	return QGraphicsView::viewportEvent(event);
+}
+
+void NodeView::startConnectionDrag(const QPointF& scenePos)
+{
+	Q_PRE(!_tempConnection);
+	// The press is forwarded to the scene below; the node must be made
+	// non-movable first so it cannot start dragging over the inner half of the port.
+	auto* source = findPortAtPosition(scenePos);
+	if (!source || source->direction() != PortDirection::Output)
+		return;
+
+	_dragSource = source;
+	_dragSource->node()->setFlag(QGraphicsItem::ItemIsMovable, false);
+	_dragSource->setTargeted(true);
+
+	_dragTarget = nullptr;
+
+	_tempConnection = new TemporaryConnectionItem(_dragSource->scenePos());
+	_scene->addItem(_tempConnection);
+}
+
+void NodeView::updateConnectionDrag(const QPointF& scenePos)
+{
+	Q_PRE(_tempConnection);
+	_tempConnection->setTo(scenePos);
+
+	// Highlight the input port currently under the cursor, if any.
+	auto* targetPort = findPortAtPosition(scenePos);
+	if (targetPort && targetPort->direction() != PortDirection::Input)
+		targetPort = nullptr;
+	if (targetPort != _dragTarget)
+	{
+		if (_dragTarget)
+			_dragTarget->setTargeted(false);
+		_dragTarget = targetPort;
+		if (targetPort)
+			targetPort->setTargeted(true);
+	}
+}
+
+void NodeView::finishConnectionDrag()
+{
+	if (_dragTarget)
+	{
+		_dragTarget->setTargeted(false);
+		addConnection(_dragSource->node(), _dragSource->index(), _dragTarget->node(),
+		              _dragTarget->index());
+		_dragTarget = nullptr;
+	}
+
+	_dragSource->setTargeted(false);
+	_dragSource->node()->setFlag(QGraphicsItem::ItemIsMovable, true);
+	_dragSource = nullptr;
+
+	Q_PRE(_tempConnection);
+	delete _tempConnection;
+	_tempConnection = nullptr;
+}
+
+PortItem* NodeView::findPortAtPosition(const QPointF& scenePos) const
+{
+	// Find the first port covering the point
+	for (QGraphicsItem* item : _scene->items(scenePos))
+		if (auto* port = dynamic_cast<PortItem*>(item))
+			return port;
+	return nullptr;
 }
 
 void NodeView::recalcSceneRect() const

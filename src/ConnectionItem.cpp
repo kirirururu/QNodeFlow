@@ -12,7 +12,7 @@ namespace {
 constexpr QColor CONNECTION_COLOR(120, 160, 200); // connection line color
 constexpr double LINE_WIDTH = 2.0;                // line thickness
 constexpr double CORNER_RADIUS = 8.0;             // corner rounding radius
-constexpr double PORT_STUB = 40.0;                // fixed length of the segment near a port
+constexpr double PORT_STUB = 30.0;                // fixed length of the segment near a port
 constexpr double MIN_FORWARD_GAP = 2 * PORT_STUB; // min x2 - x1 for the forward variant
 
 // Returns the unit vector in direction d ((0, 0) for a zero d).
@@ -75,11 +75,8 @@ void ConnectionItem::refresh()
 	update();
 }
 
-QPainterPath ConnectionItem::buildPath() const
+QPainterPath ConnectionItem::buildPath(const QPointF& a, const QPointF& b)
 {
-	const QPointF a = _from->scenePos();
-	const QPointF b = _to->scenePos();
-
 	QVector<QPointF> pts;
 	if (b.x() - a.x() > MIN_FORWARD_GAP)
 	{
@@ -108,7 +105,9 @@ QPainterPath ConnectionItem::buildPath() const
 QRectF ConnectionItem::boundingRect() const
 {
 	constexpr double margin = LINE_WIDTH + 2.0;
-	return buildPath().boundingRect().adjusted(-margin, -margin, margin, margin);
+	return buildPath(_from->scenePos(), _to->scenePos())
+	    .boundingRect()
+	    .adjusted(-margin, -margin, margin, margin);
 }
 
 void ConnectionItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
@@ -119,7 +118,7 @@ void ConnectionItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, Q
 	pen.setCapStyle(Qt::RoundCap);
 	painter->setPen(pen);
 	painter->setBrush(Qt::NoBrush);
-	painter->drawPath(buildPath());
+	painter->drawPath(buildPath(_from->scenePos(), _to->scenePos()));
 }
 
 bool operator==(const ConnectionItem& lhs, const ConnectionItem& rhs)
