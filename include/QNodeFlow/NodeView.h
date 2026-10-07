@@ -61,6 +61,8 @@ public:
 	                      int destinationPort);
 	void removeConnection(NodeItem* source, int sourcePort, NodeItem* destination, int destinationPort);
 
+	void resizeSceneToContent();
+
 	template <typename IdType>
 	static NodeView* create(QWidget* parent = nullptr)
 	{
@@ -86,7 +88,8 @@ protected:
 
 private:
 	void removeConnectionsForNode(const NodeItem* node);
-	void updateSceneRect();
+	void extendSceneIfNeeded();
+	void resizeScene(const QRectF& rect);
 	void checkIdType(const QVariant& id) const;
 
 	// Connection-drawing state (drag from an output port to an input port).
@@ -108,6 +111,10 @@ private:
 	// Right-button view panning state.
 	bool _panning = false;
 	QPoint _panLastPos;
+
+	// Guards updateSceneRect against re-entrancy: setSceneRect()/centerOn() can
+	// re-trigger itemChange -> positionChanged while a node is being dragged.
+	bool _updatingSceneRect = false;
 };
 
 } // namespace QNodeFlow

@@ -15,7 +15,7 @@ namespace {
 
 constexpr double SCENE_MARGIN = 120;
 constexpr double MIN_SCALE_FACTOR = 0.5;
-constexpr double MAX_SCALE_FACTOR = 4.0;
+constexpr double MAX_SCALE_FACTOR = 3.0;
 
 } // namespace
 
@@ -30,7 +30,7 @@ NodeView::NodeView(QMetaType keyMetaType, QWidget* parent)
 	setDragMode(NoDrag); // the node itself is dragged, not the scene
 	setTransformationAnchor(AnchorUnderMouse);
 	setBackgroundBrush(QColor(42, 44, 50));
-	updateSceneRect();
+	extendSceneIfNeeded();
 }
 
 NodeView::~NodeView()
@@ -54,8 +54,8 @@ void NodeView::addNode(const QVariant& id, NodeItem* node)
 		throw std::invalid_argument("duplicate node id");
 	_nodes.insert({id, node});
 	_scene->addItem(node);
-	connect(node, &NodeItem::positionChanged, this, &NodeView::updateSceneRect);
-	updateSceneRect();
+	connect(node, &NodeItem::positionChanged, this, &NodeView::extendSceneIfNeeded);
+	extendSceneIfNeeded();
 }
 
 NodeItem* NodeView::findNode(const QVariant& id) const
@@ -77,7 +77,6 @@ void NodeView::removeNode(const QVariant& id)
 	_scene->removeItem(node);
 	node->deleteLater();
 	_nodes.erase(nodeIter);
-	updateSceneRect();
 }
 
 void NodeView::addConnection(const QVariant& sourceId,
@@ -107,7 +106,7 @@ void NodeView::addConnection(NodeItem* source, int sourcePort, NodeItem* destina
 	const auto connection = new ConnectionItem(srcPort, dstPort);
 	_scene->addItem(connection);
 	_connections.append(connection);
-	updateSceneRect();
+	extendSceneIfNeeded();
 }
 
 void NodeView::removeConnection(const QVariant& sourceId,
@@ -146,7 +145,13 @@ void NodeView::removeConnection(NodeItem* source,
 		_connections.erase(iter);
 		connection->deleteLater();
 	}
-	updateSceneRect();
+}
+
+void NodeView::resizeSceneToContent()
+{
+	const QRectF target = _scene->itemsBoundingRect().adjusted(-SCENE_MARGIN, -SCENE_MARGIN,
+	                                                           SCENE_MARGIN, SCENE_MARGIN);
+	resizeScene(target);
 }
 
 void NodeView::removeConnectionsForNode(const NodeItem* node)
@@ -308,18 +313,28 @@ PortItem* NodeView::findPortAtPosition(const QPointF& scenePos) const
 	return nullptr;
 }
 
-void NodeView::updateSceneRect()
+void NodeView::extendSceneIfNeeded()
 {
+	const QRectF target = _scene->itemsBoundingRect().adjusted(-SCENE_MARGIN, -SCENE_MARGIN,
+	                                                           SCENE_MARGIN, SCENE_MARGIN);
 	const QRectF current = _scene->sceneRect();
-	const QRectF items = _scene->itemsBoundingRect();
+	if (!current.contains(target))
+		resizeScene(current.united(target));
+}
 
-	if (!current.contains(items))
-	{
-		const QPointF center = mapToScene(viewport()->rect().center());
-		_scene->setSceneRect(current.united(items).adjusted(-SCENE_MARGIN, -SCENE_MARGIN,
-		                                                    SCENE_MARGIN, SCENE_MARGIN));
-		centerOn(center);
-	}
+void NodeView::resizeScene(const QRectF& rect)
+{
+	// setSceneRect()/centerOn() below can re-trigger itemChange -> positionChanged
+	// on the dragged node; skip the re-entrant call to avoid infinite recursion.
+	if (_updatingSceneRect)
+		return;
+	_updatingSceneRect = true;
+
+	const QPointF center = mapToScene(viewport()->rect().center());
+	_scene->setSceneRect(rect);
+	centerOn(center);
+
+	_updatingSceneRect = false;
 }
 
 void NodeView::checkIdType(const QVariant& id) const

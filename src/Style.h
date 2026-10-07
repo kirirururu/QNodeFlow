@@ -5,7 +5,7 @@
 namespace QNodeFlow {
 
 // Node body
-constexpr double BODY_WIDTH = 320.0;    // body width
+constexpr double BODY_WIDTH = 250.0;    // body width
 constexpr double BODY_BORDER_WIDTH = 3; // body border thickness
 constexpr double BODY_RADIUS = 10;      // body corner radius
 constexpr double HEADER_HEIGHT = 32.0;  // header height
