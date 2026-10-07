@@ -2,6 +2,7 @@
 
 #include <QGraphicsView>
 #include <QList>
+#include <QPoint>
 #include <QPointF>
 
 #include <map>
@@ -80,9 +81,12 @@ protected:
 	// Tracks connection drawing: press on an output port, move, release on an input port.
 	bool viewportEvent(QEvent* event) override;
 
+	// Zooms the scene with the mouse wheel, keeping the point under the cursor fixed.
+	void wheelEvent(QWheelEvent* event) override;
+
 private:
 	void removeConnectionsForNode(const NodeItem* node);
-	void recalcSceneRect() const;
+	void updateSceneRect();
 	void checkIdType(const QVariant& id) const;
 
 	// Connection-drawing state (drag from an output port to an input port).
@@ -100,6 +104,10 @@ private:
 	TemporaryConnectionItem* _tempConnection = nullptr;
 	PortItem* _dragSource = nullptr;
 	PortItem* _dragTarget = nullptr;
+
+	// Right-button view panning state.
+	bool _panning = false;
+	QPoint _panLastPos;
 };
 
 } // namespace QNodeFlow

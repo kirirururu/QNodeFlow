@@ -8,6 +8,16 @@
 #include <QGraphicsScene>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QScrollBar>
+#include <QWheelEvent>
+
+namespace {
+
+constexpr double SCENE_MARGIN = 120;
+constexpr double MIN_SCALE_FACTOR = 0.5;
+constexpr double MAX_SCALE_FACTOR = 4.0;
+
+} // namespace
 
 namespace QNodeFlow {
 
@@ -17,10 +27,10 @@ NodeView::NodeView(QMetaType keyMetaType, QWidget* parent)
 	Q_ASSERT(_idMetaType.id() != QMetaType::UnknownType);
 	setScene(_scene);
 	setRenderHint(QPainter::Antialiasing, true);
-	setDragMode(QGraphicsView::NoDrag); // the node itself is dragged, not the scene
-	setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+	setDragMode(NoDrag); // the node itself is dragged, not the scene
+	setTransformationAnchor(AnchorUnderMouse);
 	setBackgroundBrush(QColor(42, 44, 50));
-	recalcSceneRect();
+	updateSceneRect();
 }
 
 NodeView::~NodeView()
@@ -44,7 +54,8 @@ void NodeView::addNode(const QVariant& id, NodeItem* node)
 		throw std::invalid_argument("duplicate node id");
 	_nodes.insert({id, node});
 	_scene->addItem(node);
-	recalcSceneRect();
+	connect(node, &NodeItem::positionChanged, this, &NodeView::updateSceneRect);
+	updateSceneRect();
 }
 
 NodeItem* NodeView::findNode(const QVariant& id) const
@@ -66,7 +77,7 @@ void NodeView::removeNode(const QVariant& id)
 	_scene->removeItem(node);
 	node->deleteLater();
 	_nodes.erase(nodeIter);
-	recalcSceneRect();
+	updateSceneRect();
 }
 
 void NodeView::addConnection(const QVariant& sourceId,
@@ -96,7 +107,7 @@ void NodeView::addConnection(NodeItem* source, int sourcePort, NodeItem* destina
 	const auto connection = new ConnectionItem(srcPort, dstPort);
 	_scene->addItem(connection);
 	_connections.append(connection);
-	recalcSceneRect();
+	updateSceneRect();
 }
 
 void NodeView::removeConnection(const QVariant& sourceId,
@@ -135,7 +146,7 @@ void NodeView::removeConnection(NodeItem* source,
 		_connections.erase(iter);
 		connection->deleteLater();
 	}
-	recalcSceneRect();
+	updateSceneRect();
 }
 
 void NodeView::removeConnectionsForNode(const NodeItem* node)
@@ -167,12 +178,25 @@ bool NodeView::viewportEvent(QEvent* event)
 		const auto* mouseEvent = static_cast<QMouseEvent*>(event);
 		if (mouseEvent->button() == Qt::LeftButton)
 			startConnectionDrag(mapToScene(mouseEvent->pos()));
+		else if (mouseEvent->button() == Qt::RightButton)
+		{
+			_panning = true;
+			_panLastPos = mouseEvent->pos();
+		}
 		break;
 	}
 	case QEvent::MouseMove:
 	{
+		const auto* mouseEvent = static_cast<QMouseEvent*>(event);
+		if (_panning)
+		{
+			const QPoint delta = mouseEvent->pos() - _panLastPos;
+			_panLastPos = mouseEvent->pos();
+			horizontalScrollBar()->setValue(horizontalScrollBar()->value() - delta.x());
+			verticalScrollBar()->setValue(verticalScrollBar()->value() - delta.y());
+		}
 		if (_dragSource)
-			updateConnectionDrag(mapToScene(static_cast<QMouseEvent*>(event)->pos()));
+			updateConnectionDrag(mapToScene(mouseEvent->pos()));
 		break;
 	}
 	case QEvent::MouseButtonRelease:
@@ -180,12 +204,42 @@ bool NodeView::viewportEvent(QEvent* event)
 		const auto* mouseEvent = static_cast<QMouseEvent*>(event);
 		if (mouseEvent->button() == Qt::LeftButton && _dragSource)
 			finishConnectionDrag();
+		else if (mouseEvent->button() == Qt::RightButton)
+			_panning = false;
 		break;
 	}
 	default:
 		break;
 	}
 	return QGraphicsView::viewportEvent(event);
+}
+
+void NodeView::wheelEvent(QWheelEvent* event)
+{
+	const auto delta = event->angleDelta().y();
+	if (delta == 0)
+	{
+		QGraphicsView::wheelEvent(event);
+		return;
+	}
+
+	constexpr qreal zoom = 1.15;
+	const qreal current = transform().m11();
+	const qreal clamped =
+	    qBound(MIN_SCALE_FACTOR, current * (delta > 0 ? zoom : 1.0 / zoom), MAX_SCALE_FACTOR);
+	const qreal factor = clamped / current;
+
+	// Keep the scene point under the cursor fixed after scaling.
+	const QPoint cursor = event->position().toPoint();
+	const auto sceneBefore = mapToScene(cursor);
+	scale(factor, factor);
+	const auto sceneAfter = mapToScene(cursor);
+	horizontalScrollBar()->setValue(horizontalScrollBar()->value() +
+	                                (sceneBefore.x() - sceneAfter.x()) * transform().m11());
+	verticalScrollBar()->setValue(verticalScrollBar()->value() +
+	                              (sceneBefore.y() - sceneAfter.y()) * transform().m22());
+
+	event->accept();
 }
 
 void NodeView::startConnectionDrag(const QPointF& scenePos)
@@ -254,20 +308,18 @@ PortItem* NodeView::findPortAtPosition(const QPointF& scenePos) const
 	return nullptr;
 }
 
-void NodeView::recalcSceneRect() const
+void NodeView::updateSceneRect()
 {
-	constexpr qreal margin = 120.0; // margin to allow dragging nodes past the edges
+	const QRectF current = _scene->sceneRect();
+	const QRectF items = _scene->itemsBoundingRect();
 
-	QRectF rect;
-	for (const QGraphicsItem* item : _scene->items())
+	if (!current.contains(items))
 	{
-		QRectF r = item->sceneBoundingRect();
-		rect = rect.isNull() ? r : rect.united(r);
+		const QPointF center = mapToScene(viewport()->rect().center());
+		_scene->setSceneRect(current.united(items).adjusted(-SCENE_MARGIN, -SCENE_MARGIN,
+		                                                    SCENE_MARGIN, SCENE_MARGIN));
+		centerOn(center);
 	}
-	if (rect.isNull())
-		rect = QRectF(0.0, 0.0, 800.0, 520.0);
-
-	_scene->setSceneRect(rect.adjusted(-margin, -margin, margin, margin));
 }
 
 void NodeView::checkIdType(const QVariant& id) const
