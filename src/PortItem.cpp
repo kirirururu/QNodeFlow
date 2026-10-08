@@ -1,6 +1,6 @@
 #include "PortItem.h"
 
-#include "NodeItem.h"
+#include "BasicNodeItem.h"
 #include "Style.h"
 
 #include <QGraphicsSceneHoverEvent>
@@ -9,7 +9,7 @@
 
 namespace QNodeFlow {
 
-PortItem::PortItem(PortDirection direction, int index, const QString& name, NodeItem* parent)
+PortItem::PortItem(PortDirection direction, int index, const QString& name, BasicNodeItem* parent)
     : QGraphicsObject(parent), _direction(direction), _index(index), _name(name)
 {
 	setAcceptHoverEvents(true);
@@ -30,9 +30,9 @@ QString PortItem::name() const
 	return _name;
 }
 
-NodeItem* PortItem::node() const
+BasicNodeItem* PortItem::node() const
 {
-	return static_cast<NodeItem*>(parentItem());
+	return static_cast<BasicNodeItem*>(parentItem());
 }
 
 QPointF PortItem::scenePos() const

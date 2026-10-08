@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QGraphicsObject>
-#include <QPointF>
 
 class QPainterPath;
 

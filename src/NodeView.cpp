@@ -1,6 +1,7 @@
 #include "NodeView.h"
 
 #include "ConnectionItem.h"
+#include "GlobalNodeItem.h"
 #include "NodeItem.h"
 #include "PortItem.h"
 #include "TemporaryConnectionItem.h"
@@ -8,6 +9,7 @@
 #include <QGraphicsScene>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QResizeEvent>
 #include <QScrollBar>
 #include <QWheelEvent>
 
@@ -45,17 +47,17 @@ NodeView::~NodeView()
 		delete _tempConnection;
 }
 
-void NodeView::addNode(const QVariant& id, NodeItem* node)
+NodeItem* NodeView::addNode(QVariant id, QString title)
 {
 	checkIdType(id);
-	if (node == nullptr)
-		throw std::invalid_argument("node is nullptr");
 	if (_nodes.find(id) != _nodes.end())
 		throw std::invalid_argument("duplicate node id");
-	_nodes.insert({id, node});
+	auto* node = new NodeItem(std::move(id), std::move(title));
+	_nodes.insert({node->id(), node});
 	_scene->addItem(node);
 	connect(node, &NodeItem::positionChanged, this, &NodeView::extendSceneIfNeeded);
 	extendSceneIfNeeded();
+	return node;
 }
 
 NodeItem* NodeView::findNode(const QVariant& id) const
@@ -79,6 +81,64 @@ void NodeView::removeNode(const QVariant& id)
 	_nodes.erase(nodeIter);
 }
 
+GlobalInputNodeItem* NodeView::addGlobalInputNode(QVariant id, QString title)
+{
+	checkIdType(id);
+	if (_globalInputNode)
+		throw std::runtime_error("global input node already added");
+	_globalInputNode = new GlobalInputNodeItem(std::move(id), std::move(title), this);
+	connect(horizontalScrollBar(), &QScrollBar::valueChanged, _globalInputNode,
+	        &GlobalInputNodeItem::updatePosition);
+	connect(verticalScrollBar(), &QScrollBar::valueChanged, _globalInputNode,
+	        &GlobalInputNodeItem::updatePosition);
+	_scene->addItem(_globalInputNode);
+	return _globalInputNode;
+}
+
+GlobalInputNodeItem* NodeView::getGlobalInputNode() const
+{
+	return _globalInputNode;
+}
+
+void NodeView::removeGlobalInputNode()
+{
+	if (!_globalInputNode)
+		throw std::runtime_error("global input node was not added");
+	removeConnectionsForNode(_globalInputNode);
+	_scene->removeItem(_globalInputNode);
+	_globalInputNode->deleteLater();
+	_globalInputNode = nullptr;
+}
+
+GlobalOutputNodeItem* NodeView::addGlobalOutputNode(QVariant id, QString title)
+{
+	checkIdType(id);
+	if (_globalOutputNode)
+		throw std::runtime_error("global output node already added");
+	_globalOutputNode = new GlobalOutputNodeItem(std::move(id), std::move(title), this);
+	connect(horizontalScrollBar(), &QScrollBar::valueChanged, _globalOutputNode,
+	        &GlobalOutputNodeItem::updatePosition);
+	connect(verticalScrollBar(), &QScrollBar::valueChanged, _globalOutputNode,
+	        &GlobalOutputNodeItem::updatePosition);
+	_scene->addItem(_globalOutputNode);
+	return _globalOutputNode;
+}
+
+GlobalOutputNodeItem* NodeView::getGlobalOutputNode() const
+{
+	return _globalOutputNode;
+}
+
+void NodeView::removeGlobalOutputNode()
+{
+	if (!_globalOutputNode)
+		throw std::runtime_error("global input node was not added");
+	removeConnectionsForNode(_globalOutputNode);
+	_scene->removeItem(_globalOutputNode);
+	_globalOutputNode->deleteLater();
+	_globalOutputNode = nullptr;
+}
+
 void NodeView::addConnection(const QVariant& sourceId,
                              int sourcePort,
                              const QVariant& destinationId,
@@ -93,7 +153,10 @@ void NodeView::addConnection(const QVariant& sourceId,
 	addConnection(source, sourcePort, destination, destinationPort);
 }
 
-void NodeView::addConnection(NodeItem* source, int sourcePort, NodeItem* destination, int destinationPort)
+void NodeView::addConnection(NodeWithOutputs* source,
+                             int sourcePort,
+                             NodeWithInputs* destination,
+                             int destinationPort)
 {
 	if (source == nullptr || destination == nullptr)
 		throw std::invalid_argument("source or destination node is nullptr");
@@ -149,17 +212,21 @@ void NodeView::removeConnection(NodeItem* source,
 
 void NodeView::resizeSceneToContent()
 {
-	const QRectF target = _scene->itemsBoundingRect().adjusted(-SCENE_MARGIN, -SCENE_MARGIN,
-	                                                           SCENE_MARGIN, SCENE_MARGIN);
+	QRectF target =
+	    contentBoundingRect().adjusted(-SCENE_MARGIN, -SCENE_MARGIN, SCENE_MARGIN, SCENE_MARGIN);
+	if (_globalInputNode)
+		target = target.united(_globalInputNode->boundingRect());
+	if (_globalOutputNode)
+		target = target.united(_globalOutputNode->boundingRect());
 	resizeScene(target);
 }
 
-void NodeView::removeConnectionsForNode(const NodeItem* node)
+void NodeView::removeConnectionsForNode(const BasicNodeItem* node)
 {
 	for (auto it = _connections.begin(); it != _connections.end();)
 	{
 		ConnectionItem* connection = *it;
-		if (connection->from()->parentItem() == node || connection->to()->parentItem() == node)
+		if (connection->from()->node() == node || connection->to()->node() == node)
 		{
 			_scene->removeItem(connection);
 			it = _connections.erase(it);
@@ -290,13 +357,16 @@ void NodeView::finishConnectionDrag()
 	if (_dragTarget)
 	{
 		_dragTarget->setTargeted(false);
-		addConnection(_dragSource->node(), _dragSource->index(), _dragTarget->node(),
-		              _dragTarget->index());
+		auto* source = dynamic_cast<NodeWithOutputs*>(_dragSource->node());
+		auto* destination = dynamic_cast<NodeWithInputs*>(_dragTarget->node());
+		Q_ASSERT(source && destination);
+		addConnection(source, _dragSource->index(), destination, _dragTarget->index());
 		_dragTarget = nullptr;
 	}
 
 	_dragSource->setTargeted(false);
-	_dragSource->node()->setFlag(QGraphicsItem::ItemIsMovable, true);
+	if (dynamic_cast<NodeItem*>(_dragSource->node()))
+		_dragSource->node()->setFlag(QGraphicsItem::ItemIsMovable, true);
 	_dragSource = nullptr;
 
 	Q_PRE(_tempConnection);
@@ -313,13 +383,39 @@ PortItem* NodeView::findPortAtPosition(const QPointF& scenePos) const
 	return nullptr;
 }
 
+QRectF NodeView::contentBoundingRect() const
+{
+	QRectF rect;
+	for (const QGraphicsItem* item : _scene->items())
+	{
+		if (dynamic_cast<const GlobalInputNodeItem*>(item) ||
+		    dynamic_cast<const GlobalOutputNodeItem*>(item))
+			continue;
+		rect = rect.united(item->boundingRect());
+	}
+	return rect;
+}
+
 void NodeView::extendSceneIfNeeded()
 {
-	const QRectF target = _scene->itemsBoundingRect().adjusted(-SCENE_MARGIN, -SCENE_MARGIN,
-	                                                           SCENE_MARGIN, SCENE_MARGIN);
+	QRectF target =
+	    contentBoundingRect().adjusted(-SCENE_MARGIN, -SCENE_MARGIN, SCENE_MARGIN, SCENE_MARGIN);
+	if (_globalInputNode)
+		target = target.united(_globalInputNode->boundingRect());
+	if (_globalOutputNode)
+		target = target.united(_globalOutputNode->boundingRect());
 	const QRectF current = _scene->sceneRect();
 	if (!current.contains(target))
 		resizeScene(current.united(target));
+}
+
+void NodeView::resizeEvent(QResizeEvent* event)
+{
+	QGraphicsView::resizeEvent(event);
+	if (_globalInputNode)
+		_globalInputNode->updatePosition();
+	if (_globalOutputNode)
+		_globalOutputNode->updatePosition();
 }
 
 void NodeView::resizeScene(const QRectF& rect)

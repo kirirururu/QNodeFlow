@@ -9,7 +9,7 @@ class QGraphicsSceneMouseEvent;
 
 namespace QNodeFlow {
 
-class NodeItem;
+class BasicNodeItem;
 
 enum class PortDirection
 {
@@ -32,12 +32,12 @@ class PortItem : public QGraphicsObject
 	Q_OBJECT
 
 public:
-	PortItem(PortDirection direction, int index, const QString& name, NodeItem* parent = nullptr);
+	PortItem(PortDirection direction, int index, const QString& name, BasicNodeItem* parent = nullptr);
 
 	PortDirection direction() const;
 	int index() const;
 	QString name() const;
-	NodeItem* node() const;
+	BasicNodeItem* node() const;
 
 	// Port center in scene coordinates.
 	QPointF scenePos() const;
@@ -53,6 +53,7 @@ public:
 	QPainterPath shape() const override;
 
 signals:
+	void positionChanged();
 	void hoverChanged(bool hovered);
 
 protected:

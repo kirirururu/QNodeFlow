@@ -1,9 +1,10 @@
 #pragma once
 
+#include "BasicNodeItem.h"
+
 #include <QGraphicsView>
 #include <QList>
 #include <QPoint>
-#include <QPointF>
 
 #include <map>
 
@@ -11,10 +12,15 @@ class QGraphicsScene;
 
 namespace QNodeFlow {
 
+class NodeWithInputs;
+class NodeWithOutputs;
 class NodeItem;
+class GlobalInputNodeItem;
+class GlobalOutputNodeItem;
 class ConnectionItem;
-class PortItem;
 class TemporaryConnectionItem;
+
+class PortItem;
 
 namespace detail {
 
@@ -45,15 +51,26 @@ public:
 	explicit NodeView(QMetaType keyMetaType, QWidget* parent = nullptr);
 	~NodeView() override;
 
-	void addNode(const QVariant& id, NodeItem* node);
+	NodeItem* addNode(QVariant id, QString title);
 	NodeItem* findNode(const QVariant& id) const;
 	void removeNode(const QVariant& id);
+
+	GlobalInputNodeItem* addGlobalInputNode(QVariant id, QString title);
+	GlobalInputNodeItem* getGlobalInputNode() const;
+	void removeGlobalInputNode();
+
+	GlobalOutputNodeItem* addGlobalOutputNode(QVariant id, QString title);
+	GlobalOutputNodeItem* getGlobalOutputNode() const;
+	void removeGlobalOutputNode();
 
 	void addConnection(const QVariant& sourceId,
 	                   int sourcePort,
 	                   const QVariant& destinationId,
 	                   int destinationPort);
-	void addConnection(NodeItem* source, int sourcePort, NodeItem* destination, int destinationPort);
+	void addConnection(NodeWithOutputs* source,
+	                   int sourcePort,
+	                   NodeWithInputs* destination,
+	                   int destinationPort);
 
 	void removeConnection(const QVariant& sourceId,
 	                      int sourcePort,
@@ -86,8 +103,12 @@ protected:
 	// Zooms the scene with the mouse wheel, keeping the point under the cursor fixed.
 	void wheelEvent(QWheelEvent* event) override;
 
+	// Keeps the global nodes pinned to the viewport on resize.
+	void resizeEvent(QResizeEvent* event) override;
+
 private:
-	void removeConnectionsForNode(const NodeItem* node);
+	void removeConnectionsForNode(const BasicNodeItem* node);
+	QRectF contentBoundingRect() const;
 	void extendSceneIfNeeded();
 	void resizeScene(const QRectF& rect);
 	void checkIdType(const QVariant& id) const;
@@ -101,6 +122,8 @@ private:
 	QMetaType _idMetaType;
 	QGraphicsScene* _scene;
 	std::map<QVariant, NodeItem*, detail::NodeIdComparator> _nodes;
+	GlobalInputNodeItem* _globalInputNode = nullptr;
+	GlobalOutputNodeItem* _globalOutputNode = nullptr;
 	QList<ConnectionItem*> _connections;
 
 	// Active connection being drawn, if any.

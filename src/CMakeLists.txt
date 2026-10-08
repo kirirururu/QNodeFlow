@@ -4,14 +4,18 @@ set(PUBLIC_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)
 set(PRIVATE_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include/QNodeFlow)
 
 target_sources(QNodeFlow PRIVATE
+	BasicNodeItem.cpp
 	ConnectionItem.cpp
+	GlobalNodeItem.cpp
 	NodeItem.cpp
 	NodeView.cpp
 	PortItem.cpp
 	TemporaryConnectionItem.cpp
 )
 target_sources(QNodeFlow PRIVATE
+	${PRIVATE_INCLUDE_DIR}/BasicNodeItem.h
 	${PRIVATE_INCLUDE_DIR}/ConnectionItem.h
+	${PRIVATE_INCLUDE_DIR}/GlobalNodeItem.h
 	${PRIVATE_INCLUDE_DIR}/NodeItem.h
 	${PRIVATE_INCLUDE_DIR}/NodeView.h
 	${PRIVATE_INCLUDE_DIR}/PortItem.h

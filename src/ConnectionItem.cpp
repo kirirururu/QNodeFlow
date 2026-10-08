@@ -64,8 +64,8 @@ ConnectionItem::ConnectionItem(PortItem* from, PortItem* to) : _from(from), _to(
 {
 	setZValue(-1.0); // draw under the nodes so the line ends are covered by the ports
 
-	connect(_from->node(), &NodeItem::positionChanged, this, &ConnectionItem::refresh);
-	connect(_to->node(), &NodeItem::positionChanged, this, &ConnectionItem::refresh);
+	connect(_from, &PortItem::positionChanged, this, &ConnectionItem::refresh);
+	connect(_to, &PortItem::positionChanged, this, &ConnectionItem::refresh);
 
 	refresh();
 }

@@ -33,96 +33,23 @@ QPainterPath createTopRoundedRect(const QRectF& rect, qreal radius)
 	return path;
 }
 
-qreal getPortY(int index)
-{
-	return BODY_BORDER_WIDTH + HEADER_HEIGHT + PORTS_TOP_PADDING + PORT_RADIUS + ROW_HEIGHT * index;
-}
-
 } // namespace
 
-NodeItem::NodeItem(QVariant id, const QString& title) : _id(std::move(id)), _title(title)
+NodeItem::NodeItem(QVariant id, QString title)
+    : BasicNodeItem(std::move(id), std::move(title)), NodeWithInputs(), NodeWithOutputs()
 {
 	setFlag(ItemIsMovable, true);
 	setFlag(ItemSendsGeometryChanges, true);
 	setAcceptHoverEvents(true);
-	relayout();
-}
-
-QVariant NodeItem::id() const
-{
-	return _id;
-}
-
-void NodeItem::setTitle(const QString& title)
-{
-	_title = title;
-	update();
-}
-
-PortItem* NodeItem::addInputPort(const QString& name)
-{
-	const int index = _inputs.size();
-	auto* port = new PortItem(PortDirection::Input, index, name, this);
-	port->setPos(QPointF(BODY_BORDER_WIDTH / 2 - PORT_LINE_WIDTH / 2, getPortY(index)));
-	connect(port, &PortItem::hoverChanged, this, &NodeItem::onPortHoverChanged);
-	_inputs.append(port);
-	relayout();
-	return port;
-}
-
-PortItem* NodeItem::addOutputPort(const QString& name)
-{
-	const int index = _outputs.size();
-	auto* port = new PortItem(PortDirection::Output, _outputs.size(), name, this);
-	port->setPos(QPointF(_width - (BODY_BORDER_WIDTH / 2 - PORT_LINE_WIDTH / 2), getPortY(index)));
-	connect(port, &PortItem::hoverChanged, this, &NodeItem::onPortHoverChanged);
-	_outputs.append(port);
-	relayout();
-	return port;
-}
-
-QPointF NodeItem::inputScenePos(int index) const
-{
-	const auto* port = inputPort(index);
-	return port ? port->scenePos() : QPointF();
-}
-
-QPointF NodeItem::outputScenePos(int index) const
-{
-	const auto* port = outputPort(index);
-	return port ? port->scenePos() : QPointF();
-}
-
-PortItem* NodeItem::inputPort(int index) const
-{
-	if (index < 0 || index >= _inputs.size())
-		return nullptr;
-	return _inputs[index];
-}
-
-PortItem* NodeItem::outputPort(int index) const
-{
-	if (index < 0 || index >= _outputs.size())
-		return nullptr;
-	return _outputs[index];
-}
-
-int NodeItem::inputsCount() const
-{
-	return _inputs.size();
-}
-
-int NodeItem::outputsCount() const
-{
-	return _outputs.size();
+	NodeItem::relayout();
 }
 
 QRectF NodeItem::boundingRect() const
 {
 	// Margin so the border pen is not clipped; ports are child items with
 	// their own bounding rectangles.
-	const double margin = BODY_BORDER_WIDTH / 2;
-	return QRectF(QPointF(0, 0), QSizeF(_width, _height)).adjusted(-margin, -margin, margin, margin);
+	// const double margin = BODY_BORDER_WIDTH / 2;
+	return QRectF(QPointF(0, 0), QSizeF(_width, _height));
 }
 
 void NodeItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
@@ -149,14 +76,14 @@ void NodeItem::hoverLeaveEvent(QGraphicsSceneHoverEvent* event)
 QVariant NodeItem::itemChange(GraphicsItemChange change, const QVariant& value)
 {
 	if (change == ItemPositionHasChanged)
+	{
 		emit positionChanged();
+		for (auto* port : _inputs)
+			emit port->positionChanged();
+		for (auto* port : _outputs)
+			emit port->positionChanged();
+	}
 	return QGraphicsItem::itemChange(change, value);
-}
-
-void NodeItem::onPortHoverChanged(bool hovered)
-{
-	_hoveredPortCount += hovered ? 1 : -1;
-	update();
 }
 
 void NodeItem::relayout()
@@ -166,6 +93,11 @@ void NodeItem::relayout()
 	_height = HEADER_HEIGHT + ROW_HEIGHT * rows + BOTTOM_PADDING;
 	prepareGeometryChange();
 	update();
+}
+
+double NodeItem::getPortY(int index)
+{
+	return BODY_BORDER_WIDTH + HEADER_HEIGHT + PORTS_TOP_PADDING + PORT_RADIUS + ROW_HEIGHT * index;
 }
 
 void NodeItem::paintBody(QPainter* painter) const
@@ -195,7 +127,7 @@ void NodeItem::paintHeader(QPainter* painter) const
 	titleFont.setBold(true);
 	painter->setFont(titleFont);
 	painter->setPen(QPen(color::NODE_TITLE));
-	painter->drawText(headerRect, Qt::AlignCenter, _title);
+	painter->drawText(headerRect, Qt::AlignCenter, title());
 }
 
 } // namespace QNodeFlow
