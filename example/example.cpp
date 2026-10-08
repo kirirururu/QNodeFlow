@@ -7,6 +7,20 @@
 
 using namespace QNodeFlow;
 
+static void printConnectionChange(bool added,
+                                  const QVariant& sourceId,
+                                  int sourcePort,
+                                  const QVariant& destinationId,
+                                  int destinationPort)
+{
+	qDebug().noquote() << QString("%1 connection between '%2:%3' and '%4:%5'")
+	                          .arg(added ? "Added" : "Removed")
+	                          .arg(sourceId.toString())
+	                          .arg(sourcePort)
+	                          .arg(destinationId.toString())
+	                          .arg(destinationPort);
+}
+
 int main(int argc, char* argv[])
 {
 	QApplication a(argc, argv);

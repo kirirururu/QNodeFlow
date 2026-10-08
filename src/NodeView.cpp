@@ -361,6 +361,8 @@ void NodeView::finishConnectionDrag()
 		auto* destination = dynamic_cast<NodeWithInputs*>(_dragTarget->node());
 		Q_ASSERT(source && destination);
 		addConnection(source, _dragSource->index(), destination, _dragTarget->index());
+		emit connectionAdded(source->id(), _dragSource->index(), destination->id(),
+		                     _dragTarget->index());
 		_dragTarget = nullptr;
 	}
 
