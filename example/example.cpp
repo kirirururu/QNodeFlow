@@ -29,6 +29,7 @@ int main(int argc, char* argv[])
 	window.setWindowTitle("QNodeFlow Example");
 
 	NodeView* view = NodeView::create<QString>();
+	view->setCanvasSize(2000, 1500);
 
 	auto* node1 = view->addNode("node1", "Node 1");
 	node1->addInputPort("input 1");

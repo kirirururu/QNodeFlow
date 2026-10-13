@@ -48,8 +48,8 @@ QRectF NodeItem::boundingRect() const
 {
 	// Margin so the border pen is not clipped; ports are child items with
 	// their own bounding rectangles.
-	// const double margin = BODY_BORDER_WIDTH / 2;
-	return QRectF(QPointF(0, 0), QSizeF(_width, _height));
+	constexpr double margin = BODY_BORDER_WIDTH / 2;
+	return QRectF(QPointF(0, 0), QSizeF(_width, _height)).adjusted(-margin, -margin, margin, margin);
 }
 
 void NodeItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)

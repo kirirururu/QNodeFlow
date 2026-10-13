@@ -15,9 +15,11 @@
 
 namespace {
 
-constexpr double SCENE_MARGIN = 120;
+constexpr auto SCENE_BACKGROUND = QColor(42, 44, 50);
+constexpr auto VIEW_BACKGROUND = Qt::black;
+
 constexpr double MIN_SCALE_FACTOR = 0.5;
-constexpr double MAX_SCALE_FACTOR = 3.0;
+constexpr double MAX_SCALE_FACTOR = 1.0;
 
 } // namespace
 
@@ -31,8 +33,7 @@ NodeView::NodeView(QMetaType keyMetaType, QWidget* parent)
 	setRenderHint(QPainter::Antialiasing, true);
 	setDragMode(NoDrag); // the node itself is dragged, not the scene
 	setTransformationAnchor(AnchorUnderMouse);
-	setBackgroundBrush(QColor(42, 44, 50));
-	extendSceneIfNeeded();
+	setCanvasSize(500, 500);
 }
 
 NodeView::~NodeView()
@@ -55,8 +56,6 @@ NodeItem* NodeView::addNode(QVariant id, QString title)
 	auto* node = new NodeItem(std::move(id), std::move(title));
 	_nodes.insert({node->id(), node});
 	_scene->addItem(node);
-	connect(node, &NodeItem::positionChanged, this, &NodeView::extendSceneIfNeeded);
-	extendSceneIfNeeded();
 	return node;
 }
 
@@ -92,6 +91,7 @@ GlobalInputNodeItem* NodeView::addGlobalInputNode(QVariant id, QString title)
 	connect(verticalScrollBar(), &QScrollBar::valueChanged, _globalInputNode,
 	        &GlobalInputNodeItem::updatePosition);
 	_scene->addItem(_globalInputNode);
+	resizeScene();
 	return _globalInputNode;
 }
 
@@ -106,6 +106,7 @@ void NodeView::removeGlobalInputNode()
 		throw std::runtime_error("global input node was not added");
 	removeConnectionsForNode(_globalInputNode);
 	_scene->removeItem(_globalInputNode);
+	resizeScene();
 	_globalInputNode->deleteLater();
 	_globalInputNode = nullptr;
 }
@@ -121,6 +122,7 @@ GlobalOutputNodeItem* NodeView::addGlobalOutputNode(QVariant id, QString title)
 	connect(verticalScrollBar(), &QScrollBar::valueChanged, _globalOutputNode,
 	        &GlobalOutputNodeItem::updatePosition);
 	_scene->addItem(_globalOutputNode);
+	resizeScene();
 	return _globalOutputNode;
 }
 
@@ -135,6 +137,7 @@ void NodeView::removeGlobalOutputNode()
 		throw std::runtime_error("global input node was not added");
 	removeConnectionsForNode(_globalOutputNode);
 	_scene->removeItem(_globalOutputNode);
+	resizeScene();
 	_globalOutputNode->deleteLater();
 	_globalOutputNode = nullptr;
 }
@@ -169,7 +172,6 @@ void NodeView::addConnection(NodeWithOutputs* source,
 	const auto connection = new ConnectionItem(srcPort, dstPort);
 	_scene->addItem(connection);
 	_connections.append(connection);
-	extendSceneIfNeeded();
 }
 
 void NodeView::removeConnection(const QVariant& sourceId,
@@ -210,15 +212,15 @@ void NodeView::removeConnection(NodeItem* source,
 	}
 }
 
-void NodeView::resizeSceneToContent()
+QSizeF NodeView::canvasSize() const
 {
-	QRectF target =
-	    contentBoundingRect().adjusted(-SCENE_MARGIN, -SCENE_MARGIN, SCENE_MARGIN, SCENE_MARGIN);
-	if (_globalInputNode)
-		target = target.united(_globalInputNode->boundingRect());
-	if (_globalOutputNode)
-		target = target.united(_globalOutputNode->boundingRect());
-	resizeScene(target);
+	return _canvasSize;
+}
+
+void NodeView::setCanvasSize(quint32 width, quint32 height)
+{
+	_canvasSize = QSizeF(width, height);
+	resizeScene();
 }
 
 void NodeView::removeConnectionsForNode(const BasicNodeItem* node)
@@ -237,6 +239,12 @@ void NodeView::removeConnectionsForNode(const BasicNodeItem* node)
 			++it;
 		}
 	}
+}
+
+void NodeView::drawBackground(QPainter* painter, const QRectF& rect)
+{
+	painter->fillRect(rect, VIEW_BACKGROUND);
+	painter->fillRect(scene()->sceneRect() & rect, SCENE_BACKGROUND);
 }
 
 bool NodeView::viewportEvent(QEvent* event)
@@ -385,42 +393,17 @@ PortItem* NodeView::findPortAtPosition(const QPointF& scenePos) const
 	return nullptr;
 }
 
-QRectF NodeView::contentBoundingRect() const
-{
-	QRectF rect;
-	for (const QGraphicsItem* item : _scene->items())
-	{
-		if (dynamic_cast<const GlobalInputNodeItem*>(item) ||
-		    dynamic_cast<const GlobalOutputNodeItem*>(item))
-			continue;
-		rect = rect.united(item->boundingRect());
-	}
-	return rect;
-}
-
-void NodeView::extendSceneIfNeeded()
-{
-	QRectF target =
-	    contentBoundingRect().adjusted(-SCENE_MARGIN, -SCENE_MARGIN, SCENE_MARGIN, SCENE_MARGIN);
-	if (_globalInputNode)
-		target = target.united(_globalInputNode->boundingRect());
-	if (_globalOutputNode)
-		target = target.united(_globalOutputNode->boundingRect());
-	const QRectF current = _scene->sceneRect();
-	if (!current.contains(target))
-		resizeScene(current.united(target));
-}
-
 void NodeView::resizeEvent(QResizeEvent* event)
 {
 	QGraphicsView::resizeEvent(event);
-	if (_globalInputNode)
-		_globalInputNode->updatePosition();
-	if (_globalOutputNode)
-		_globalOutputNode->updatePosition();
+	// resizeScene();
+	// if (_globalInputNode)
+	// 	_globalInputNode->updatePosition();
+	// if (_globalOutputNode)
+	// 	_globalOutputNode->updatePosition();
 }
 
-void NodeView::resizeScene(const QRectF& rect)
+void NodeView::resizeScene()
 {
 	// setSceneRect()/centerOn() below can re-trigger itemChange -> positionChanged
 	// on the dragged node; skip the re-entrant call to avoid infinite recursion.
@@ -429,6 +412,11 @@ void NodeView::resizeScene(const QRectF& rect)
 	_updatingSceneRect = true;
 
 	const QPointF center = mapToScene(viewport()->rect().center());
+	QRectF rect(QPointF(0, 0), _canvasSize);
+	if (_globalInputNode)
+		rect.adjust(-_globalInputNode->boundingRect().width(), 0, 0, 0);
+	if (_globalOutputNode)
+		rect.adjust(0, 0, _globalOutputNode->boundingRect().width(), 0);
 	_scene->setSceneRect(rect);
 	centerOn(center);
 

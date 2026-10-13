@@ -78,7 +78,8 @@ public:
 	                      int destinationPort);
 	void removeConnection(NodeItem* source, int sourcePort, NodeItem* destination, int destinationPort);
 
-	void resizeSceneToContent();
+	QSizeF canvasSize() const;
+	void setCanvasSize(quint32 width, quint32 height);
 
 	template <typename IdType>
 	static NodeView* create(QWidget* parent = nullptr)
@@ -97,6 +98,8 @@ signals:
 	                       int destinationPort);
 
 protected:
+	void drawBackground(QPainter* painter, const QRectF& rect) override;
+
 	// Tracks connection drawing: press on an output port, move, release on an input port.
 	bool viewportEvent(QEvent* event) override;
 
@@ -108,9 +111,7 @@ protected:
 
 private:
 	void removeConnectionsForNode(const BasicNodeItem* node);
-	QRectF contentBoundingRect() const;
-	void extendSceneIfNeeded();
-	void resizeScene(const QRectF& rect);
+	void resizeScene();
 	void checkIdType(const QVariant& id) const;
 
 	// Connection-drawing state (drag from an output port to an input port).
@@ -135,8 +136,7 @@ private:
 	bool _panning = false;
 	QPoint _panLastPos;
 
-	// Guards updateSceneRect against re-entrancy: setSceneRect()/centerOn() can
-	// re-trigger itemChange -> positionChanged while a node is being dragged.
+	QSizeF _canvasSize;
 	bool _updatingSceneRect = false;
 };
 

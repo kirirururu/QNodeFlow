@@ -34,8 +34,6 @@ GlobalInputNodeItem::GlobalInputNodeItem(QVariant id, QString title, NodeView* v
     : BasicNodeItem(std::move(id), std::move(title)), NodeWithOutputs(), _view(view)
 {
 	Q_PRE(_view);
-	setFlag(ItemIsMovable, false);
-	setFlag(ItemIgnoresTransformations);
 	setZValue(1000);
 
 	_width = PANEL_WIDTH;
@@ -44,10 +42,9 @@ GlobalInputNodeItem::GlobalInputNodeItem(QVariant id, QString title, NodeView* v
 
 void GlobalInputNodeItem::updatePosition()
 {
-	_height = _view->viewport()->height();
+	_height = _view->scene()->height();
 
-	QPointF scenePos = _view->mapToScene(QPoint(0, 0));
-	setPos(scenePos.x(), _view->mapToScene(QPoint(0, 0)).y());
+	setPos(QPoint(-_width, 0));
 	update();
 	for (auto* port : _outputs)
 		emit port->positionChanged();
@@ -85,7 +82,6 @@ GlobalOutputNodeItem::GlobalOutputNodeItem(QVariant id, QString title, NodeView*
 {
 	Q_PRE(_view);
 	setFlag(ItemIsMovable, false);
-	setFlag(ItemIgnoresTransformations);
 	setZValue(1000);
 
 	_width = PANEL_WIDTH;
@@ -94,9 +90,9 @@ GlobalOutputNodeItem::GlobalOutputNodeItem(QVariant id, QString title, NodeView*
 
 void GlobalOutputNodeItem::updatePosition()
 {
-	_height = _view->viewport()->height();
+	_height = _view->scene()->height();
 
-	setPos(_view->mapToScene(QPoint(_view->viewport()->width() - _width, 0)));
+	setPos(_view->canvasSize().width(), 0);
 	update();
 	for (auto* port : _inputs)
 		emit port->positionChanged();
