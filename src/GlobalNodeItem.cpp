@@ -42,7 +42,8 @@ GlobalInputNodeItem::GlobalInputNodeItem(QVariant id, QString title, NodeView* v
 
 void GlobalInputNodeItem::updatePosition()
 {
-	_height = _view->scene()->height();
+	prepareGeometryChange();
+	_height = _view->canvasSize().height();
 
 	setPos(QPoint(-_width, 0));
 	update();
@@ -54,8 +55,9 @@ void GlobalInputNodeItem::relayout()
 {
 }
 
-double GlobalInputNodeItem::getPortY(int index)
+double GlobalInputNodeItem::calculatePortY(int index)
 {
+	// TODO: temporary, until port moving will be implemented
 	return BODY_BORDER_WIDTH + HEADER_HEIGHT + PORTS_TOP_PADDING + PORT_RADIUS + ROW_HEIGHT * index;
 }
 
@@ -90,6 +92,7 @@ GlobalOutputNodeItem::GlobalOutputNodeItem(QVariant id, QString title, NodeView*
 
 void GlobalOutputNodeItem::updatePosition()
 {
+	prepareGeometryChange();
 	_height = _view->scene()->height();
 
 	setPos(_view->canvasSize().width(), 0);
@@ -102,8 +105,9 @@ void GlobalOutputNodeItem::relayout()
 {
 }
 
-double GlobalOutputNodeItem::getPortY(int index)
+double GlobalOutputNodeItem::calculatePortY(int index)
 {
+	// TODO: temporary, until port moving will be implemented
 	return BODY_BORDER_WIDTH + HEADER_HEIGHT + PORTS_TOP_PADDING + PORT_RADIUS + ROW_HEIGHT * index;
 }
 

@@ -18,7 +18,7 @@ public:
 
 protected:
 	void relayout() override;
-	double getPortY(int index) override;
+	double calculatePortY(int index) override;
 
 public:
 	QRectF boundingRect() const override;
@@ -38,7 +38,7 @@ public:
 
 protected:
 	void relayout() override;
-	double getPortY(int index) override;
+	double calculatePortY(int index) override;
 
 public:
 	QRectF boundingRect() const override;

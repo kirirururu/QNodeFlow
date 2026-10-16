@@ -93,14 +93,14 @@ QVariant NodeItem::itemChange(GraphicsItemChange change, const QVariant& value)
 
 void NodeItem::relayout()
 {
-	const int rows = qMax(qMax(_inputs.size(), _outputs.size()), static_cast<int>(MIN_BODY_ROWS));
+	prepareGeometryChange();
+	const int rows = std::max({_inputs.size(), _outputs.size(), MIN_BODY_ROWS});
 	_width = BODY_WIDTH;
 	_height = HEADER_HEIGHT + ROW_HEIGHT * rows + BOTTOM_PADDING;
-	prepareGeometryChange();
 	update();
 }
 
-double NodeItem::getPortY(int index)
+double NodeItem::calculatePortY(int index)
 {
 	return BODY_BORDER_WIDTH + HEADER_HEIGHT + PORTS_TOP_PADDING + PORT_RADIUS + ROW_HEIGHT * index;
 }

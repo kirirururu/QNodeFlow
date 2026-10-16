@@ -11,7 +11,7 @@ constexpr double BODY_RADIUS = 10;      // body corner radius
 constexpr double HEADER_HEIGHT = 32.0;  // header height
 constexpr double ROW_HEIGHT = 36.0;     // port row height
 constexpr double BOTTOM_PADDING = 20.0; // bottom padding
-constexpr double MIN_BODY_ROWS = 2;     // minimum rows so the node is not a thin strip
+constexpr qsizetype MIN_BODY_ROWS = 2;  // minimum rows so the node is not a thin strip
 
 // Ports
 constexpr double PORT_RADIUS = 8.0;        // port radius

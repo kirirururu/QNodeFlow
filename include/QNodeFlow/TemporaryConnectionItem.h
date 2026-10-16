@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QGraphicsItem>
+#include <QScopedPointer>
 
 namespace QNodeFlow {
 
@@ -23,6 +24,8 @@ private:
 	PortItem* _from;
 	QPointF _target;
 	bool _hasTarget = false;
+
+	QScopedPointer<QPainterPath> _path;
 };
 
 } // namespace QNodeFlow

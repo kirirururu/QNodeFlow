@@ -46,20 +46,26 @@ NodeView::NodeView(QMetaType keyMetaType, QWidget* parent)
 
 NodeView::~NodeView()
 {
-	// Connections first (they reference nodes), then the nodes themselves.
-	for (const auto& connection : _connections)
-		connection->deleteLater();
-	for (const auto& [id, node] : _nodes)
-		node->deleteLater();
-
 	if (_tempConnection)
 		delete _tempConnection;
+	if (_selection)
+		delete _selection;
+
+	for (const auto& connection : _connections)
+		connection->deleteLater();
+
+	for (const auto& [id, node] : _nodes)
+		node->deleteLater();
+	if (_globalInputNode)
+		_globalInputNode->deleteLater();
+	if (_globalOutputNode)
+		_globalOutputNode->deleteLater();
 }
 
 NodeItem* NodeView::addNode(QVariant id, QString title)
 {
 	checkIdType(id);
-	if (_nodes.find(id) != _nodes.end())
+	if (hasNodeWithId(id))
 		throw std::invalid_argument("duplicate node id");
 	auto* node = new NodeItem(std::move(id), std::move(title));
 	_nodes.insert({node->id(), node});
@@ -84,9 +90,9 @@ void NodeView::removeNode(const QVariant& id)
 		return;
 	auto* node = nodeIter->second;
 	removeConnectionsForNode(node);
-	emit nodeRemoved(node->id());
-	node->deleteLater();
 	_nodes.erase(nodeIter);
+	node->deleteLater();
+	emit nodeRemoved(node->id());
 }
 
 GlobalInputNodeItem* NodeView::addGlobalInputNode(QVariant id, QString title)
@@ -94,6 +100,8 @@ GlobalInputNodeItem* NodeView::addGlobalInputNode(QVariant id, QString title)
 	checkIdType(id);
 	if (_globalInputNode)
 		throw std::runtime_error("global input node already added");
+	if (hasNodeWithId(id))
+		throw std::invalid_argument("duplicate node id");
 	_globalInputNode = new GlobalInputNodeItem(std::move(id), std::move(title), this);
 	connect(horizontalScrollBar(), &QScrollBar::valueChanged, _globalInputNode,
 	        &GlobalInputNodeItem::updatePosition);
@@ -104,7 +112,7 @@ GlobalInputNodeItem* NodeView::addGlobalInputNode(QVariant id, QString title)
 	return _globalInputNode;
 }
 
-GlobalInputNodeItem* NodeView::getGlobalInputNode() const
+GlobalInputNodeItem* NodeView::globalInputNode() const
 {
 	return _globalInputNode;
 }
@@ -124,6 +132,8 @@ GlobalOutputNodeItem* NodeView::addGlobalOutputNode(QVariant id, QString title)
 	checkIdType(id);
 	if (_globalOutputNode)
 		throw std::runtime_error("global output node already added");
+	if (hasNodeWithId(id))
+		throw std::invalid_argument("duplicate node id");
 	_globalOutputNode = new GlobalOutputNodeItem(std::move(id), std::move(title), this);
 	connect(horizontalScrollBar(), &QScrollBar::valueChanged, _globalOutputNode,
 	        &GlobalOutputNodeItem::updatePosition);
@@ -134,7 +144,7 @@ GlobalOutputNodeItem* NodeView::addGlobalOutputNode(QVariant id, QString title)
 	return _globalOutputNode;
 }
 
-GlobalOutputNodeItem* NodeView::getGlobalOutputNode() const
+GlobalOutputNodeItem* NodeView::globalOutputNode() const
 {
 	return _globalOutputNode;
 }
@@ -142,9 +152,9 @@ GlobalOutputNodeItem* NodeView::getGlobalOutputNode() const
 void NodeView::removeGlobalOutputNode()
 {
 	if (!_globalOutputNode)
-		throw std::runtime_error("global input node was not added");
+		throw std::runtime_error("global output node was not added");
 	removeConnectionsForNode(_globalOutputNode);
-	connect(_globalInputNode, &GlobalInputNodeItem::destroyed, this, &NodeView::resizeScene);
+	connect(_globalOutputNode, &GlobalOutputNodeItem::destroyed, this, &NodeView::resizeScene);
 	_globalOutputNode->deleteLater();
 	_globalOutputNode = nullptr;
 }
@@ -154,21 +164,23 @@ void NodeView::addConnection(const QVariant& sourceId,
                              const QVariant& destinationId,
                              int destinationPort)
 {
-	const auto source = findNode(sourceId);
+	const NodeWithOutputs* source = findSourceNode(sourceId);
 	if (!source)
 		throw std::runtime_error("source node not found");
-	const auto destination = findNode(destinationId);
+
+	const NodeWithInputs* destination = findDestinationNode(destinationId);
 	if (!destination)
 		throw std::runtime_error("destination node not found");
+
 	addConnection(source, sourcePort, destination, destinationPort);
 }
 
-void NodeView::addConnection(NodeWithOutputs* source,
+void NodeView::addConnection(const NodeWithOutputs* source,
                              int sourcePort,
-                             NodeWithInputs* destination,
+                             const NodeWithInputs* destination,
                              int destinationPort)
 {
-	if (source == nullptr || destination == nullptr)
+	if (!source || !destination)
 		throw std::invalid_argument("source or destination node is nullptr");
 
 	const auto srcPort = source->outputPort(sourcePort);
@@ -176,9 +188,7 @@ void NodeView::addConnection(NodeWithOutputs* source,
 	if (!srcPort || !dstPort)
 		throw std::invalid_argument("invalid source or destination port index");
 
-	const auto connection = new ConnectionItem(srcPort, dstPort);
-	_scene->addItem(connection);
-	_connections.append(connection);
+	addConnection(srcPort, dstPort);
 }
 
 void NodeView::removeConnection(const QVariant& sourceId,
@@ -186,32 +196,37 @@ void NodeView::removeConnection(const QVariant& sourceId,
                                 const QVariant& destinationId,
                                 int destinationPort)
 {
-	const auto source = findNode(sourceId);
+	const auto* source = findSourceNode(sourceId);
 	if (!source)
 		throw std::runtime_error("source node not found");
-	const auto destination = findNode(destinationId);
+	const auto* destination = findDestinationNode(destinationId);
 	if (!destination)
 		throw std::runtime_error("destination node not found");
 
 	removeConnection(source, sourcePort, destination, destinationPort);
 }
 
-void NodeView::removeConnection(NodeItem* source,
+void NodeView::removeConnection(const NodeWithOutputs* source,
                                 int sourcePort,
-                                NodeItem* destination,
+                                const NodeWithInputs* destination,
                                 int destinationPort)
 {
+	if (!source || !destination)
+		throw std::invalid_argument("source or destination node is nullptr");
+
 	const auto srcPort = source->outputPort(sourcePort);
 	const auto dstPort = destination->inputPort(destinationPort);
 	if (!srcPort || !dstPort)
 		throw std::invalid_argument("invalid source or destination port index");
 
-	ConnectionItem target{srcPort, dstPort};
+	ConnectionItem target = {srcPort, dstPort};
 	auto iter =
 	    std::find_if(_connections.begin(), _connections.end(),
 	                 [&target](const ConnectionItem* connection) { return *connection == target; });
 	if (iter != _connections.end())
-		removeConnectionItem(*iter);
+		removeConnection(*iter);
+	else
+		throw std::invalid_argument("connection not found");
 }
 
 QSizeF NodeView::canvasSize() const
@@ -221,34 +236,71 @@ QSizeF NodeView::canvasSize() const
 
 void NodeView::setCanvasSize(quint32 width, quint32 height)
 {
+	if (width == 0 || height == 0)
+		throw std::invalid_argument("canvas's width or height is zero");
 	_canvasSize = QSizeF(width, height);
 	resizeScene();
 }
 
-void NodeView::removeConnectionsForNode(const BasicNodeItem* node)
+NodeWithOutputs* NodeView::findSourceNode(const QVariant& id) const
 {
-	auto it = _connections.begin();
-	while (it != _connections.end())
-	{
-		ConnectionItem* connection = *it;
-		if (connection->from()->node() == node || connection->to()->node() == node)
-		{
-			it = _connections.erase(it);
-			emit connectionRemoved(connection->from()->node()->id(), connection->from()->index(),
-			                       connection->to()->node()->id(), connection->to()->index());
-			connection->deleteLater();
-		}
-		else
-			++it;
-	}
+	NodeWithOutputs* node = nullptr;
+	if (_globalInputNode && _globalInputNode->id() == id)
+		node = _globalInputNode;
+	else
+		node = findNode(id);
+	return node;
 }
 
-void NodeView::removeConnectionItem(ConnectionItem* connection)
+NodeWithInputs* NodeView::findDestinationNode(const QVariant& id) const
+{
+	NodeWithInputs* node = nullptr;
+	if (_globalOutputNode && _globalOutputNode->id() == id)
+		node = _globalOutputNode;
+	else
+		node = findNode(id);
+	return node;
+}
+
+void NodeView::addConnection(PortItem* sourcePort, PortItem* destinationPort)
+{
+	if (sourcePort->direction() != PortDirection::Output ||
+	    destinationPort->direction() != PortDirection::Input)
+		throw std::invalid_argument("invalid port directions");
+
+	auto* connection = new ConnectionItem(sourcePort, destinationPort);
+	addConnection(connection);
+}
+
+void NodeView::addConnection(ConnectionItem* connection)
+{
+	if (std::find_if(_connections.begin(), _connections.end(), [connection](const ConnectionItem* item)
+	                 { return *item == *connection; }) != _connections.end())
+		throw std::invalid_argument("duplicate connection");
+
+	_scene->addItem(connection);
+	_connections.append(connection);
+	emit connectionAdded(connection->from()->node()->id(), connection->from()->index(),
+	                     connection->to()->node()->id(), connection->to()->index());
+}
+
+void NodeView::removeConnection(ConnectionItem* connection)
 {
 	_connections.removeOne(connection);
+	connection->deleteLater();
 	emit connectionRemoved(connection->from()->node()->id(), connection->from()->index(),
 	                       connection->to()->node()->id(), connection->to()->index());
-	connection->deleteLater();
+}
+
+void NodeView::removeConnectionsForNode(const BasicNodeItem* node)
+{
+	QList<ConnectionItem*> connectionsToRemove;
+	std::copy_if(_connections.begin(), _connections.end(), std::back_inserter(connectionsToRemove),
+	             [node](const ConnectionItem* connection)
+	             { return connection->from()->node() == node || connection->to()->node() == node; });
+
+	for (auto* connection : connectionsToRemove)
+		removeConnection(connection);
 }
 
 void NodeView::removeSelectedItems()
@@ -266,7 +318,7 @@ void NodeView::removeSelectedItems()
 			selectedNodeIds.append(id);
 
 	for (ConnectionItem* connection : selectedConnections)
-		removeConnectionItem(connection);
+		removeConnection(connection);
 
 	for (const QVariant& id : selectedNodeIds)
 		removeNode(id);
@@ -351,7 +403,7 @@ void NodeView::wheelEvent(QWheelEvent* event)
 	constexpr qreal zoom = 1.15;
 	const qreal current = transform().m11();
 	const qreal clamped =
-	    qBound(MIN_SCALE_FACTOR, current * (delta > 0 ? zoom : 1.0 / zoom), MAX_SCALE_FACTOR);
+	    std::clamp(current * (delta > 0 ? zoom : 1.0 / zoom), MIN_SCALE_FACTOR, MAX_SCALE_FACTOR);
 	const qreal factor = clamped / current;
 
 	// Keep the scene point under the cursor fixed after scaling.
@@ -422,29 +474,28 @@ void NodeView::updateConnectionDrag(const QPointF& scenePos)
 
 void NodeView::finishConnectionDrag()
 {
-	if (_dragTarget)
-	{
-		_dragTarget->setTargeted(false);
-		auto* source = dynamic_cast<NodeWithOutputs*>(_dragSource->node());
-		auto* destination = dynamic_cast<NodeWithInputs*>(_dragTarget->node());
-		Q_ASSERT(source && destination);
-		addConnection(source, _dragSource->index(), destination, _dragTarget->index());
-		emit connectionAdded(source->id(), _dragSource->index(), destination->id(),
-		                     _dragTarget->index());
-		_dragTarget = nullptr;
-	}
-
 	_dragSource->setTargeted(false);
 	if (dynamic_cast<NodeItem*>(_dragSource->node()))
 	{
 		_dragSource->node()->setFlag(QGraphicsItem::ItemIsMovable, true);
 		_dragSource->node()->setFlag(QGraphicsItem::ItemIsSelectable, true);
 	}
+	PortItem* sourcePort = _dragSource;
 	_dragSource = nullptr;
+
+	PortItem* targetPort = _dragTarget;
+	if (_dragTarget)
+	{
+		_dragTarget->setTargeted(false);
+		_dragTarget = nullptr;
+	}
 
 	Q_PRE(_tempConnection);
 	delete _tempConnection;
 	_tempConnection = nullptr;
+
+	if (targetPort)
+		addConnection(sourcePort, targetPort);
 }
 
 PortItem* NodeView::findPortAtPosition(const QPointF& scenePos) const
@@ -513,10 +564,22 @@ void NodeView::resizeScene()
 
 void NodeView::checkIdType(const QVariant& id) const
 {
-	Q_PRE_X(id.metaType() == _idMetaType, QString("Invalid node id type (expected %1, got %2)")
-	                                          .arg(_idMetaType.name(), id.metaType().name())
-	                                          .toStdString()
-	                                          .c_str());
+	if (id.metaType() != _idMetaType)
+		throw std::invalid_argument(QString("invalid node id type (expected %1, got %2)")
+		                                .arg(_idMetaType.name(), id.metaType().name())
+		                                .toStdString()
+		                                .c_str());
+}
+
+bool NodeView::hasNodeWithId(const QVariant& id) const
+{
+	if (_nodes.find(id) != _nodes.end())
+		return true;
+	if (_globalInputNode && _globalInputNode->id() == id)
+		return true;
+	if (_globalOutputNode && _globalOutputNode->id() == id)
+		return true;
+	return false;
 }
 
 } // namespace QNodeFlow

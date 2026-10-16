@@ -15,6 +15,7 @@ constexpr QColor TEMP_LINE_COLOR(120, 160, 200); // color of the line being draw
 TemporaryConnectionItem::TemporaryConnectionItem(PortItem* from) : _from(from)
 {
 	setZValue(1.0); // draw on top of everything
+	_path.reset(new QPainterPath());
 }
 
 void TemporaryConnectionItem::setTo(const QPointF& to)
@@ -22,6 +23,7 @@ void TemporaryConnectionItem::setTo(const QPointF& to)
 	_target = to;
 	_hasTarget = true;
 	prepareGeometryChange();
+	*_path = ConnectionItem::buildPath(_from, to);
 	update();
 }
 
@@ -30,9 +32,7 @@ QRectF TemporaryConnectionItem::boundingRect() const
 	if (!_hasTarget)
 		return QRectF();
 	constexpr double margin = 4.0;
-	return ConnectionItem::buildPath(_from, _target)
-	    .boundingRect()
-	    .adjusted(-margin, -margin, margin, margin);
+	return _path->boundingRect().adjusted(-margin, -margin, margin, margin);
 }
 
 void TemporaryConnectionItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
@@ -45,7 +45,7 @@ void TemporaryConnectionItem::paint(QPainter* painter, const QStyleOptionGraphic
 	pen.setCapStyle(Qt::RoundCap);
 	painter->setPen(pen);
 	painter->setBrush(Qt::NoBrush);
-	painter->drawPath(ConnectionItem::buildPath(_from, _target));
+	painter->drawPath(*_path);
 }
 
 } // namespace QNodeFlow

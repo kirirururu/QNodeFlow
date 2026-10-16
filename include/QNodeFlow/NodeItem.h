@@ -35,7 +35,7 @@ protected:
 	QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
 
 	void relayout() override;
-	double getPortY(int index) override;
+	double calculatePortY(int index) override;
 
 	void paintBody(QPainter* painter) const;
 	void paintHeader(QPainter* painter) const;

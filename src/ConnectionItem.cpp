@@ -46,8 +46,8 @@ QPainterPath roundedPolyline(const QVector<QPointF>& points, double radius)
 		const QPointF dirOut = unitVector(b - v);
 
 		// Clamp the radius so the corners do not overlap on short segments.
-		const double maxR = qMin((v - a).manhattanLength(), (b - v).manhattanLength()) / 2.0;
-		const double r = qMin(radius, qMax(0.0, maxR));
+		const double maxR = std::min((v - a).manhattanLength(), (b - v).manhattanLength()) / 2.0;
+		const double r = std::min(radius, maxR);
 
 		const QPointF p1 = v - dirIn * r;
 		const QPointF p2 = v + dirOut * r;
@@ -71,6 +71,7 @@ ConnectionItem::ConnectionItem(PortItem* from, PortItem* to) : _from(from), _to(
 	connect(_from, &PortItem::positionChanged, this, &ConnectionItem::refresh);
 	connect(_to, &PortItem::positionChanged, this, &ConnectionItem::refresh);
 
+	_path.reset(new QPainterPath());
 	refresh();
 }
 
@@ -113,7 +114,7 @@ QRectF ConnectionItem::boundingRect() const
 {
 	// The margin must cover the stroked shape: half the stroke width beyond the line.
 	const double margin = LINE_WIDTH / 2 + HIT_TOLERANCE;
-	return buildPath(_from, _to->scenePos()).boundingRect().adjusted(-margin, -margin, margin, margin);
+	return _path->boundingRect().adjusted(-margin, -margin, margin, margin);
 }
 
 QPainterPath ConnectionItem::shape() const
@@ -123,7 +124,7 @@ QPainterPath ConnectionItem::shape() const
 	stroker.setWidth(LINE_WIDTH + 2 * HIT_TOLERANCE);
 	stroker.setCapStyle(Qt::RoundCap);
 	stroker.setJoinStyle(Qt::RoundJoin);
-	return stroker.createStroke(buildPath(_from, _to->scenePos()));
+	return stroker.createStroke(*_path);
 }
 
 void ConnectionItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
@@ -134,7 +135,7 @@ void ConnectionItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, Q
 	pen.setCapStyle(Qt::RoundCap);
 	painter->setPen(pen);
 	painter->setBrush(Qt::NoBrush);
-	painter->drawPath(buildPath(_from, _to->scenePos()));
+	painter->drawPath(*_path);
 }
 
 bool operator==(const ConnectionItem& lhs, const ConnectionItem& rhs)
@@ -157,6 +158,7 @@ QVariant ConnectionItem::itemChange(GraphicsItemChange change, const QVariant& v
 void ConnectionItem::refresh()
 {
 	prepareGeometryChange();
+	*_path = buildPath(_from, _to->scenePos());
 	update();
 }
 

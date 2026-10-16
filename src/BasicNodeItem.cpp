@@ -38,7 +38,7 @@ PortItem* NodeWithInputs::addInputPort(const QString& name)
 {
 	const int index = _inputs.size();
 	auto* port = new PortItem(PortDirection::Input, index, name, this);
-	port->setPos(QPointF(BODY_BORDER_WIDTH / 2 - PORT_LINE_WIDTH / 2, getPortY(index)));
+	port->setPos(QPointF(BODY_BORDER_WIDTH / 2 - PORT_LINE_WIDTH / 2, calculatePortY(index)));
 	QObject::connect(port, &PortItem::hoverChanged,
 	                 [this](bool hovered) { onPortHoverChanged(hovered); });
 	_inputs.append(port);
@@ -70,7 +70,7 @@ PortItem* NodeWithOutputs::addOutputPort(const QString& name)
 {
 	const int index = _outputs.size();
 	auto* port = new PortItem(PortDirection::Output, _outputs.size(), name, this);
-	port->setPos(QPointF(_width - (BODY_BORDER_WIDTH / 2 - PORT_LINE_WIDTH / 2), getPortY(index)));
+	port->setPos(QPointF(_width - (BODY_BORDER_WIDTH / 2 - PORT_LINE_WIDTH / 2), calculatePortY(index)));
 	QObject::connect(port, &PortItem::hoverChanged,
 	                 [this](bool hovered) { onPortHoverChanged(hovered); });
 	_outputs.append(port);

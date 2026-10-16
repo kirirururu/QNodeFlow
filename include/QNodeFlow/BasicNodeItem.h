@@ -23,7 +23,7 @@ protected:
 	void onPortHoverChanged(bool hovered);
 
 	virtual void relayout() = 0;
-	virtual double getPortY(int index) = 0;
+	virtual double calculatePortY(int index) = 0;
 
 	// Current geometric size of the node.
 	double _width = 0.0;

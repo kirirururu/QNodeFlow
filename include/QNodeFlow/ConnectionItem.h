@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QGraphicsObject>
+#include <QScopedPointer>
 
 class QPainterPath;
 
@@ -42,6 +43,8 @@ private:
 
 	PortItem* _from;
 	PortItem* _to;
+
+	QScopedPointer<QPainterPath> _path;
 };
 
 } // namespace QNodeFlow

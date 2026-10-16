@@ -57,27 +57,30 @@ public:
 	void removeNode(const QVariant& id);
 
 	GlobalInputNodeItem* addGlobalInputNode(QVariant id, QString title);
-	GlobalInputNodeItem* getGlobalInputNode() const;
+	GlobalInputNodeItem* globalInputNode() const;
 	void removeGlobalInputNode();
 
 	GlobalOutputNodeItem* addGlobalOutputNode(QVariant id, QString title);
-	GlobalOutputNodeItem* getGlobalOutputNode() const;
+	GlobalOutputNodeItem* globalOutputNode() const;
 	void removeGlobalOutputNode();
 
 	void addConnection(const QVariant& sourceId,
 	                   int sourcePort,
 	                   const QVariant& destinationId,
 	                   int destinationPort);
-	void addConnection(NodeWithOutputs* source,
+	void addConnection(const NodeWithOutputs* source,
 	                   int sourcePort,
-	                   NodeWithInputs* destination,
+	                   const NodeWithInputs* destination,
 	                   int destinationPort);
 
 	void removeConnection(const QVariant& sourceId,
 	                      int sourcePort,
 	                      const QVariant& destinationId,
 	                      int destinationPort);
-	void removeConnection(NodeItem* source, int sourcePort, NodeItem* destination, int destinationPort);
+	void removeConnection(const NodeWithOutputs* source,
+	                      int sourcePort,
+	                      const NodeWithInputs* destination,
+	                      int destinationPort);
 
 	QSizeF canvasSize() const;
 	void setCanvasSize(quint32 width, quint32 height);
@@ -114,11 +117,16 @@ protected:
 	void keyPressEvent(QKeyEvent* event) override;
 
 private:
+	NodeWithOutputs* findSourceNode(const QVariant& id) const;
+	NodeWithInputs* findDestinationNode(const QVariant& id) const;
+
+	void addConnection(PortItem* sourcePort, PortItem* destinationPort);
+	void addConnection(ConnectionItem* connection);
+
+	void removeConnection(ConnectionItem* connection);
 	void removeConnectionsForNode(const BasicNodeItem* node);
-	void removeConnectionItem(ConnectionItem* connection);
+
 	void removeSelectedItems();
-	void resizeScene();
-	void checkIdType(const QVariant& id) const;
 
 	void startConnectionDrag(const QPointF& scenePos);
 	void updateConnectionDrag(const QPointF& scenePos);
@@ -128,6 +136,11 @@ private:
 	void startRectSelection(const QPointF& scenePos, bool additive);
 	void updateRectSelection(const QPointF& scenePos);
 	void finishRectSelection();
+
+	void resizeScene();
+
+	void checkIdType(const QVariant& id) const;
+	bool hasNodeWithId(const QVariant& id) const;
 
 	QMetaType _idMetaType;
 	QGraphicsScene* _scene;
