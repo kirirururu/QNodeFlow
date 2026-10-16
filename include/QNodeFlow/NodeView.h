@@ -9,6 +9,7 @@
 #include <map>
 
 class QGraphicsScene;
+class QKeyEvent;
 
 namespace QNodeFlow {
 
@@ -19,6 +20,7 @@ class GlobalInputNodeItem;
 class GlobalOutputNodeItem;
 class ConnectionItem;
 class TemporaryConnectionItem;
+class SelectionItem;
 
 class PortItem;
 
@@ -40,8 +42,7 @@ struct NodeIdComparator
  * NodeView owns the scene: nodes and connections are added via addNode()/addConnection()
  * and removed via removeNode()/removeConnection(). NodeView owns the added items and
  * frees them on removal or in the destructor. Removing a node automatically removes the
- * connections that reference it. The scene rectangle is computed automatically from the
- * content, with a margin for dragging.
+ * connections that reference it.
  */
 class NodeView : public QGraphicsView
 {
@@ -88,6 +89,9 @@ public:
 	}
 
 signals:
+	void nodeAdded(const QVariant& id);
+	void nodeRemoved(const QVariant& id);
+
 	void connectionAdded(const QVariant& sourceId,
 	                     int sourcePort,
 	                     const QVariant& destinationId,
@@ -106,19 +110,24 @@ protected:
 	// Zooms the scene with the mouse wheel, keeping the point under the cursor fixed.
 	void wheelEvent(QWheelEvent* event) override;
 
-	// Keeps the global nodes pinned to the viewport on resize.
-	void resizeEvent(QResizeEvent* event) override;
+	// Deletes the selected nodes and connections (DEL).
+	void keyPressEvent(QKeyEvent* event) override;
 
 private:
 	void removeConnectionsForNode(const BasicNodeItem* node);
+	void removeConnectionItem(ConnectionItem* connection);
+	void removeSelectedItems();
 	void resizeScene();
 	void checkIdType(const QVariant& id) const;
 
-	// Connection-drawing state (drag from an output port to an input port).
 	void startConnectionDrag(const QPointF& scenePos);
 	void updateConnectionDrag(const QPointF& scenePos);
 	void finishConnectionDrag();
 	PortItem* findPortAtPosition(const QPointF& scenePos) const;
+
+	void startRectSelection(const QPointF& scenePos, bool additive);
+	void updateRectSelection(const QPointF& scenePos);
+	void finishRectSelection();
 
 	QMetaType _idMetaType;
 	QGraphicsScene* _scene;
@@ -127,14 +136,20 @@ private:
 	GlobalOutputNodeItem* _globalOutputNode = nullptr;
 	QList<ConnectionItem*> _connections;
 
-	// Active connection being drawn, if any.
+	// Active connection being drawn, if any
 	TemporaryConnectionItem* _tempConnection = nullptr;
 	PortItem* _dragSource = nullptr;
 	PortItem* _dragTarget = nullptr;
 
-	// Right-button view panning state.
+	// Right-button view panning state
 	bool _panning = false;
 	QPoint _panLastPos;
+
+	// Rectangular selection
+	SelectionItem* _selection = nullptr;
+	bool _rectSelecting = false;
+	bool _rectSelectionAdditive = false;
+	QPointF _rectSelectionOrigin;
 
 	QSizeF _canvasSize;
 	bool _updatingSceneRect = false;

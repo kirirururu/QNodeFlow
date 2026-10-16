@@ -11,7 +11,7 @@ class PortItem;
 /**
  * A connection line between two node ports
  */
-class ConnectionItem : public QGraphicsObject
+class ConnectionItem final : public QGraphicsObject
 {
 	Q_OBJECT
 
@@ -22,21 +22,24 @@ public:
 	PortItem* to() const { return _to; }
 
 	QRectF boundingRect() const override;
+	QPainterPath shape() const override;
+
 	void paint(QPainter* painter,
 	           const QStyleOptionGraphicsItem* option,
 	           QWidget* widget = nullptr) override;
 
-	// Builds the connection path between two scene-space points.
-	// `a` is the output port, `b` is the input port.
+	// Build the connection path between source port and a scene-space point
 	static QPainterPath buildPath(const PortItem* from, const QPointF& to);
 
 	friend bool operator==(const ConnectionItem& lhs, const ConnectionItem& rhs);
 	friend bool operator!=(const ConnectionItem& lhs, const ConnectionItem& rhs);
 
-private slots:
-	void refresh();
+protected:
+	QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
 
 private:
+	void refresh();
+
 	PortItem* _from;
 	PortItem* _to;
 };

@@ -2,6 +2,7 @@
 
 #include "NodeItem.h"
 #include "PortItem.h"
+#include "Style.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -9,12 +10,14 @@
 
 namespace {
 
-constexpr QColor CONNECTION_COLOR(120, 160, 200); // connection line color
-constexpr double LINE_WIDTH = 2.0;                // line thickness
-constexpr double CORNER_RADIUS = 8.0;             // corner rounding radius
-constexpr double PORT_STUB = 30.0;                // fixed length of the segment near a port
-constexpr double MIN_FORWARD_GAP = 2 * PORT_STUB; // min x2 - x1 for the forward variant
-constexpr double PARALLEL_LINES_GAP = 20;         // gap between two parallel connections
+constexpr QColor CONNECTION_COLOR(120, 160, 200);         // connection line color
+constexpr QColor CONNECTION_COLOR_SELECTED(235, 179, 66); // selected connection line
+constexpr double LINE_WIDTH = 2.0;                        // line thickness
+constexpr double CORNER_RADIUS = 8.0;                     // corner rounding radius
+constexpr double PORT_STUB = 30.0;                        // fixed length of the segment near a port
+constexpr double MIN_FORWARD_GAP = 2 * PORT_STUB;         // min x2 - x1 for the forward variant
+constexpr double PARALLEL_LINES_GAP = 20;                 // gap between two parallel connections
+constexpr double HIT_TOLERANCE = 4.0;                     // extra grab distance around the line
 
 // Returns the unit vector in direction d ((0, 0) for a zero d).
 QPointF unitVector(const QPointF& d)
@@ -63,17 +66,12 @@ namespace QNodeFlow {
 ConnectionItem::ConnectionItem(PortItem* from, PortItem* to) : _from(from), _to(to)
 {
 	setZValue(-1.0); // draw under the nodes so the line ends are covered by the ports
+	setFlag(ItemIsSelectable, true);
 
 	connect(_from, &PortItem::positionChanged, this, &ConnectionItem::refresh);
 	connect(_to, &PortItem::positionChanged, this, &ConnectionItem::refresh);
 
 	refresh();
-}
-
-void ConnectionItem::refresh()
-{
-	prepareGeometryChange();
-	update();
 }
 
 QPainterPath ConnectionItem::buildPath(const PortItem* from, const QPointF& to)
@@ -113,14 +111,25 @@ QPainterPath ConnectionItem::buildPath(const PortItem* from, const QPointF& to)
 
 QRectF ConnectionItem::boundingRect() const
 {
-	constexpr double margin = LINE_WIDTH + 2.0;
+	// The margin must cover the stroked shape: half the stroke width beyond the line.
+	const double margin = LINE_WIDTH / 2 + HIT_TOLERANCE;
 	return buildPath(_from, _to->scenePos()).boundingRect().adjusted(-margin, -margin, margin, margin);
+}
+
+QPainterPath ConnectionItem::shape() const
+{
+	// A thin strip along the line instead of the whole bounding rectangle.
+	QPainterPathStroker stroker;
+	stroker.setWidth(LINE_WIDTH + 2 * HIT_TOLERANCE);
+	stroker.setCapStyle(Qt::RoundCap);
+	stroker.setJoinStyle(Qt::RoundJoin);
+	return stroker.createStroke(buildPath(_from, _to->scenePos()));
 }
 
 void ConnectionItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
 {
 	painter->setRenderHint(QPainter::Antialiasing, true);
-	QPen pen(CONNECTION_COLOR, LINE_WIDTH);
+	QPen pen(isSelected() ? CONNECTION_COLOR_SELECTED : CONNECTION_COLOR, LINE_WIDTH);
 	pen.setJoinStyle(Qt::RoundJoin);
 	pen.setCapStyle(Qt::RoundCap);
 	painter->setPen(pen);
@@ -136,6 +145,19 @@ bool operator==(const ConnectionItem& lhs, const ConnectionItem& rhs)
 bool operator!=(const ConnectionItem& lhs, const ConnectionItem& rhs)
 {
 	return !(lhs == rhs);
+}
+
+QVariant ConnectionItem::itemChange(GraphicsItemChange change, const QVariant& value)
+{
+	if (change == ItemSelectedHasChanged)
+		update();
+	return QGraphicsObject::itemChange(change, value);
+}
+
+void ConnectionItem::refresh()
+{
+	prepareGeometryChange();
+	update();
 }
 
 } // namespace QNodeFlow

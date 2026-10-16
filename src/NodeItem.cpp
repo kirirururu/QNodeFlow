@@ -39,6 +39,7 @@ NodeItem::NodeItem(QVariant id, QString title)
     : BasicNodeItem(std::move(id), std::move(title)), NodeWithInputs(), NodeWithOutputs()
 {
 	setFlag(ItemIsMovable, true);
+	setFlag(ItemIsSelectable, true);
 	setFlag(ItemSendsGeometryChanges, true);
 	setAcceptHoverEvents(true);
 	NodeItem::relayout();
@@ -83,6 +84,10 @@ QVariant NodeItem::itemChange(GraphicsItemChange change, const QVariant& value)
 		for (auto* port : _outputs)
 			emit port->positionChanged();
 	}
+	else if (change == ItemSelectedHasChanged)
+	{
+		update();
+	}
 	return QGraphicsItem::itemChange(change, value);
 }
 
@@ -104,7 +109,9 @@ void NodeItem::paintBody(QPainter* painter) const
 {
 	const QRectF body(0, 0, _width, _height);
 	const bool highlighted = _hovered || _hoveredPortCount > 0;
-	const QColor borderColor = highlighted ? color::BORDER_HOVER : color::BORDER;
+	const QColor borderColor = isSelected()  ? color::BORDER_SELECTED
+	                           : highlighted ? color::BORDER_HOVER
+	                                         : color::BORDER;
 	const QPen borderPen(borderColor, BODY_BORDER_WIDTH);
 	painter->setPen(borderPen);
 	painter->setBrush(QBrush(color::BACKGROUND));

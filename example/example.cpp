@@ -7,6 +7,11 @@
 
 using namespace QNodeFlow;
 
+static void printNodeChange(bool added, const QVariant& id)
+{
+	qDebug().noquote() << QString("%1 node '%2'").arg(added ? "Added" : "Removed").arg(id.toString());
+}
+
 static void printConnectionChange(bool added,
                                   const QVariant& sourceId,
                                   int sourcePort,
@@ -64,6 +69,8 @@ int main(int argc, char* argv[])
 	globalOutput->addInputPort("sink 2");
 
 	using namespace std::placeholders;
+	QObject::connect(view, &NodeView::nodeAdded, std::bind(&printNodeChange, true, _1));
+	QObject::connect(view, &NodeView::nodeRemoved, std::bind(&printNodeChange, false, _1));
 	QObject::connect(view, &NodeView::connectionAdded,
 	                 std::bind(&printConnectionChange, true, _1, _2, _3, _4));
 	QObject::connect(view, &NodeView::connectionRemoved,
@@ -71,9 +78,6 @@ int main(int argc, char* argv[])
 
 	view->addConnection(node1, 0, node2, 0);
 	view->addConnection(node1, 1, node2, 1);
-
-	view->addConnection(node2, 0, node3, 0);
-	view->removeConnection(node2, 0, node3, 0);
 
 	window.setCentralWidget(view);
 	window.showMaximized();

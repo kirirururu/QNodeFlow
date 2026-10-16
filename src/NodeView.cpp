@@ -4,9 +4,11 @@
 #include "GlobalNodeItem.h"
 #include "NodeItem.h"
 #include "PortItem.h"
+#include "SelectionItem.h"
 #include "TemporaryConnectionItem.h"
 
 #include <QGraphicsScene>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QResizeEvent>
@@ -33,7 +35,13 @@ NodeView::NodeView(QMetaType keyMetaType, QWidget* parent)
 	setRenderHint(QPainter::Antialiasing, true);
 	setDragMode(NoDrag); // the node itself is dragged, not the scene
 	setTransformationAnchor(AnchorUnderMouse);
+	// The view must keep keyboard focus for DEL to reach keyPressEvent.
+	setFocusPolicy(Qt::StrongFocus);
 	setCanvasSize(500, 500);
+
+	_selection = new SelectionItem();
+	_selection->setVisible(false);
+	_scene->addItem(_selection);
 }
 
 NodeView::~NodeView()
@@ -56,6 +64,7 @@ NodeItem* NodeView::addNode(QVariant id, QString title)
 	auto* node = new NodeItem(std::move(id), std::move(title));
 	_nodes.insert({node->id(), node});
 	_scene->addItem(node);
+	emit nodeAdded(node->id());
 	return node;
 }
 
@@ -75,7 +84,7 @@ void NodeView::removeNode(const QVariant& id)
 		return;
 	auto* node = nodeIter->second;
 	removeConnectionsForNode(node);
-	_scene->removeItem(node);
+	emit nodeRemoved(node->id());
 	node->deleteLater();
 	_nodes.erase(nodeIter);
 }
@@ -105,8 +114,7 @@ void NodeView::removeGlobalInputNode()
 	if (!_globalInputNode)
 		throw std::runtime_error("global input node was not added");
 	removeConnectionsForNode(_globalInputNode);
-	_scene->removeItem(_globalInputNode);
-	resizeScene();
+	connect(_globalInputNode, &GlobalInputNodeItem::destroyed, this, &NodeView::resizeScene);
 	_globalInputNode->deleteLater();
 	_globalInputNode = nullptr;
 }
@@ -136,8 +144,7 @@ void NodeView::removeGlobalOutputNode()
 	if (!_globalOutputNode)
 		throw std::runtime_error("global input node was not added");
 	removeConnectionsForNode(_globalOutputNode);
-	_scene->removeItem(_globalOutputNode);
-	resizeScene();
+	connect(_globalInputNode, &GlobalInputNodeItem::destroyed, this, &NodeView::resizeScene);
 	_globalOutputNode->deleteLater();
 	_globalOutputNode = nullptr;
 }
@@ -204,12 +211,7 @@ void NodeView::removeConnection(NodeItem* source,
 	    std::find_if(_connections.begin(), _connections.end(),
 	                 [&target](const ConnectionItem* connection) { return *connection == target; });
 	if (iter != _connections.end())
-	{
-		ConnectionItem* connection = *iter;
-		_scene->removeItem(connection);
-		_connections.erase(iter);
-		connection->deleteLater();
-	}
+		removeConnectionItem(*iter);
 }
 
 QSizeF NodeView::canvasSize() const
@@ -225,20 +227,49 @@ void NodeView::setCanvasSize(quint32 width, quint32 height)
 
 void NodeView::removeConnectionsForNode(const BasicNodeItem* node)
 {
-	for (auto it = _connections.begin(); it != _connections.end();)
+	auto it = _connections.begin();
+	while (it != _connections.end())
 	{
 		ConnectionItem* connection = *it;
 		if (connection->from()->node() == node || connection->to()->node() == node)
 		{
-			_scene->removeItem(connection);
 			it = _connections.erase(it);
-			delete connection;
+			emit connectionRemoved(connection->from()->node()->id(), connection->from()->index(),
+			                       connection->to()->node()->id(), connection->to()->index());
+			connection->deleteLater();
 		}
 		else
-		{
 			++it;
-		}
 	}
+}
+
+void NodeView::removeConnectionItem(ConnectionItem* connection)
+{
+	_connections.removeOne(connection);
+	emit connectionRemoved(connection->from()->node()->id(), connection->from()->index(),
+	                       connection->to()->node()->id(), connection->to()->index());
+	connection->deleteLater();
+}
+
+void NodeView::removeSelectedItems()
+{
+	// Copy first: removing a node drops its connections as a side effect, which
+	// would invalidate the iteration.
+	QList<ConnectionItem*> selectedConnections;
+	for (ConnectionItem* connection : _connections)
+		if (connection->isSelected())
+			selectedConnections.append(connection);
+
+	QList<QVariant> selectedNodeIds;
+	for (const auto& [id, node] : _nodes)
+		if (node->isSelected())
+			selectedNodeIds.append(id);
+
+	for (ConnectionItem* connection : selectedConnections)
+		removeConnectionItem(connection);
+
+	for (const QVariant& id : selectedNodeIds)
+		removeNode(id);
 }
 
 void NodeView::drawBackground(QPainter* painter, const QRectF& rect)
@@ -257,7 +288,14 @@ bool NodeView::viewportEvent(QEvent* event)
 	{
 		const auto* mouseEvent = static_cast<QMouseEvent*>(event);
 		if (mouseEvent->button() == Qt::LeftButton)
+		{
 			startConnectionDrag(mapToScene(mouseEvent->pos()));
+			// The press missed an output port: on the empty background it starts the
+			// rubber band; clicks on items are left to the scene (selection, dragging).
+			if (!_dragSource && _scene->items(mapToScene(mouseEvent->pos())).isEmpty())
+				startRectSelection(mapToScene(mouseEvent->pos()),
+				                   mouseEvent->modifiers() & Qt::ControlModifier);
+		}
 		else if (mouseEvent->button() == Qt::RightButton)
 		{
 			_panning = true;
@@ -268,6 +306,8 @@ bool NodeView::viewportEvent(QEvent* event)
 	case QEvent::MouseMove:
 	{
 		const auto* mouseEvent = static_cast<QMouseEvent*>(event);
+		if (_rectSelecting)
+			updateRectSelection(mapToScene(mouseEvent->pos()));
 		if (_panning)
 		{
 			const QPoint delta = mouseEvent->pos() - _panLastPos;
@@ -282,8 +322,13 @@ bool NodeView::viewportEvent(QEvent* event)
 	case QEvent::MouseButtonRelease:
 	{
 		const auto* mouseEvent = static_cast<QMouseEvent*>(event);
-		if (mouseEvent->button() == Qt::LeftButton && _dragSource)
-			finishConnectionDrag();
+		if (mouseEvent->button() == Qt::LeftButton)
+		{
+			if (_rectSelecting)
+				finishRectSelection();
+			else if (_dragSource)
+				finishConnectionDrag();
+		}
 		else if (mouseEvent->button() == Qt::RightButton)
 			_panning = false;
 		break;
@@ -322,6 +367,17 @@ void NodeView::wheelEvent(QWheelEvent* event)
 	event->accept();
 }
 
+void NodeView::keyPressEvent(QKeyEvent* event)
+{
+	// Deleting while a connection is being drawn would leave _dragSource dangling.
+	if (event->key() == Qt::Key_Delete && !_tempConnection)
+	{
+		removeSelectedItems();
+		return;
+	}
+	QGraphicsView::keyPressEvent(event);
+}
+
 void NodeView::startConnectionDrag(const QPointF& scenePos)
 {
 	Q_PRE(!_tempConnection);
@@ -333,6 +389,10 @@ void NodeView::startConnectionDrag(const QPointF& scenePos)
 
 	_dragSource = source;
 	_dragSource->node()->setFlag(QGraphicsItem::ItemIsMovable, false);
+	// Same for selectability: a selectable node under the press would swallow the
+	// selection of the other nodes.
+	if (dynamic_cast<NodeItem*>(_dragSource->node()))
+		_dragSource->node()->setFlag(QGraphicsItem::ItemIsSelectable, false);
 	_dragSource->setTargeted(true);
 
 	_dragTarget = nullptr;
@@ -376,7 +436,10 @@ void NodeView::finishConnectionDrag()
 
 	_dragSource->setTargeted(false);
 	if (dynamic_cast<NodeItem*>(_dragSource->node()))
+	{
 		_dragSource->node()->setFlag(QGraphicsItem::ItemIsMovable, true);
+		_dragSource->node()->setFlag(QGraphicsItem::ItemIsSelectable, true);
+	}
 	_dragSource = nullptr;
 
 	Q_PRE(_tempConnection);
@@ -393,14 +456,39 @@ PortItem* NodeView::findPortAtPosition(const QPointF& scenePos) const
 	return nullptr;
 }
 
-void NodeView::resizeEvent(QResizeEvent* event)
+void NodeView::startRectSelection(const QPointF& scenePos, bool additive)
 {
-	QGraphicsView::resizeEvent(event);
-	// resizeScene();
-	// if (_globalInputNode)
-	// 	_globalInputNode->updatePosition();
-	// if (_globalOutputNode)
-	// 	_globalOutputNode->updatePosition();
+	Q_PRE(_selection);
+	_rectSelecting = true;
+	_rectSelectionAdditive = additive;
+	_rectSelectionOrigin = scenePos;
+	_selection->setRect(QRectF(_rectSelectionOrigin, _rectSelectionOrigin));
+	_selection->setVisible(true);
+}
+
+void NodeView::updateRectSelection(const QPointF& scenePos)
+{
+	Q_PRE(_rectSelecting && _selection);
+	_selection->setRect(QRectF(_rectSelectionOrigin, scenePos).normalized());
+}
+
+void NodeView::finishRectSelection()
+{
+	Q_PRE(_rectSelecting && _selection);
+	const QRectF rect = _selection->rect();
+	_rectSelecting = false;
+	_selection->setVisible(false);
+
+	// Without Ctrl the previous selection is dropped; a plain click (zero-size rectangle)
+	// therefore just clears it.
+	if (!_rectSelectionAdditive)
+		_scene->clearSelection();
+	if (rect.width() > 0 || rect.height() > 0)
+	{
+		for (const auto& [id, node] : _nodes)
+			if (node->sceneBoundingRect().intersects(rect))
+				node->setSelected(true);
+	}
 }
 
 void NodeView::resizeScene()

@@ -10,6 +10,7 @@ target_sources(QNodeFlow PRIVATE
 	NodeItem.cpp
 	NodeView.cpp
 	PortItem.cpp
+	SelectionItem.cpp
 	TemporaryConnectionItem.cpp
 )
 target_sources(QNodeFlow PRIVATE
@@ -19,6 +20,7 @@ target_sources(QNodeFlow PRIVATE
 	${PRIVATE_INCLUDE_DIR}/NodeItem.h
 	${PRIVATE_INCLUDE_DIR}/NodeView.h
 	${PRIVATE_INCLUDE_DIR}/PortItem.h
+	${PRIVATE_INCLUDE_DIR}/SelectionItem.h
 	${PRIVATE_INCLUDE_DIR}/TemporaryConnectionItem.h
 )
 
@@ -33,3 +35,6 @@ target_link_libraries(QNodeFlow
 if (UNIX)
 	target_compile_options(QNodeFlow PRIVATE -Wall -Wextra -Werror)
 endif ()
+
+#target_compile_options(QNodeFlow PUBLIC -fsanitize=address -fno-omit-frame-pointer)
+#target_link_options(QNodeFlow PUBLIC -fsanitize=address)
